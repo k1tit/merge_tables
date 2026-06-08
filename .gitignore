@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+dist/
+build/
+MergeColumns_ready/
+*.xlsx
+merge_build.log
+3805/
+3801/
+3802/
+3803/
+3804/
+3806/

@@ -1,0 +1,246 @@
+from __future__ import annotations
+
+from typing import Any
+
+import pandas as pd
+
+from .aggregate import DataAggregator
+from .column_resolver import ColumnSpecParser
+from .context import BuildContext
+from .merge_keys import MergeKeysParser
+from .sources import ExcelSourceReader
+from .text_utils import TextNorm
+
+
+class DataMerger:
+    """Последовательное объединение источников в одну таблицу."""
+
+    def __init__(self, ctx: BuildContext) -> None:
+        self.ctx = ctx
+        self.reader = ExcelSourceReader(ctx)
+        self.keys = MergeKeysParser()
+
+    def merge_all(
+        self,
+        frames: list[pd.DataFrame],
+        source_specs: list[dict[str, Any]],
+    ) -> pd.DataFrame:
+        if not frames:
+            raise ValueError("Нет данных для merge.")
+        result = frames[0]
+        for spec, part in zip(source_specs[1:], frames[1:], strict=True):
+            result = self._merge_source_into(result, spec, part, label="merge")
+        return result
+
+    def merge_post(
+        self,
+        result: pd.DataFrame,
+        post_specs: list[dict[str, Any]],
+    ) -> pd.DataFrame:
+        out = result
+        for spec in post_specs:
+            out = self._merge_source_into(out, spec, None, label="post-merge")
+        return out
+
+    def _merge_source_into(
+        self,
+        result: pd.DataFrame,
+        spec: dict[str, Any],
+        part: pd.DataFrame | None,
+        *,
+        label: str,
+    ) -> pd.DataFrame:
+        left, right, dedupe, aggregate = self.keys.parse_source(
+            spec, self.ctx.default_merge
+        )
+        if spec.get("dedupe") is None and spec.get("lookup_dedupe") is None:
+            dedupe = self.ctx.lookup_dedupe and not aggregate
+
+        before = set(result.columns)
+        if part is None:
+            part = self.reader.read(
+                spec,
+                merge_right=right,
+                key_excel=spec.get("key_excel"),
+            )
+        else:
+            part = self._enrich_part(part, spec)
+
+        overlap = self.keys.overlap_count(
+            self.keys.normalize_frame(result.copy(), left),
+            self.keys.normalize_frame(part.copy(), right),
+            left,
+            right,
+        )
+
+        overwrite = spec.get("overwrite_columns")
+        if overwrite is not None and not isinstance(overwrite, list):
+            overwrite = [overwrite]
+
+        result = self._merge_one(
+            result,
+            part,
+            left,
+            right,
+            dedupe=dedupe,
+            aggregate=aggregate,
+            overwrite_columns=overwrite,
+        )
+
+        expected = ColumnSpecParser.output_names(spec)
+        added = [c for c in expected if c not in before]
+        missing = [c for c in expected if c not in result.columns]
+        if missing:
+            for col in missing:
+                result[col] = pd.NA
+
+        require_keys = spec.get("merge_require_non_empty")
+        if require_keys:
+            if isinstance(require_keys, str):
+                require_keys = [require_keys]
+            result = self._clear_when_keys_empty(result, list(require_keys), added)
+
+        if self.ctx.verbose:
+            msg = f"  {label} {spec.get('file')!r}: +{added}"
+            if missing:
+                msg += " (колонка создана, но merge не добавил — проверьте ключи)"
+            msg += f", ключ совпал у {overlap} строк"
+            print(msg)
+            for col in added:
+                if col in result.columns:
+                    filled = TextNorm.filled_count(result[col])
+                    print(f"    {col}: заполнено {filled} из {len(result)}")
+                    if filled == 0 and label == "merge":
+                        print(
+                            f"    ВНИМАНИЕ: {col!r} пустая — "
+                            f"проверьте Customer/KUNNR в файле и в config merge_on"
+                        )
+        return result
+
+    def _enrich_part(
+        self, part: pd.DataFrame, spec: dict[str, Any]
+    ) -> pd.DataFrame:
+        out = part
+        for ef in spec.get("enrich_from") or []:
+            ef_left, ef_right, ef_dedupe, ef_agg = self.keys.parse_source(ef, None)
+            if ef.get("dedupe") is None and ef.get("lookup_dedupe") is None:
+                ef_dedupe = self.ctx.lookup_dedupe and not ef_agg
+
+            sub = self.reader.read(
+                ef,
+                merge_right=ef_right,
+                key_excel=ef.get("key_excel"),
+            )
+            for key in ef_left:
+                if key not in out.columns:
+                    raise KeyError(
+                        f"enrich_from {ef.get('file')!r}: в part нет ключа {key!r}."
+                    )
+            for key in ef_right:
+                if key not in sub.columns:
+                    raise KeyError(
+                        f"enrich_from {ef.get('file')!r}: в файле нет ключа {key!r}."
+                    )
+
+            out = self.keys.normalize_frame(out, ef_left)
+            sub = self.keys.normalize_frame(sub, ef_right)
+            if ef_agg:
+                sub = DataAggregator.apply(sub, ef_agg, ef_right)
+            elif ef_dedupe:
+                sub = sub.drop_duplicates(subset=ef_right, keep="first")
+
+            add_cols = [
+                c
+                for c in ColumnSpecParser.output_names(ef)
+                if c in sub.columns and c not in ef_right
+            ]
+            keep = list(dict.fromkeys(list(ef_right) + add_cols))
+            sub = sub[[c for c in keep if c in sub.columns]]
+            drop = [c for c in sub.columns if c in out.columns and c not in ef_right]
+            sub = sub.drop(columns=drop, errors="ignore")
+
+            before_cols = set(out.columns)
+            out = out.merge(sub, left_on=ef_left, right_on=ef_right, how="left")
+            drop_after = [c for c in ef_right if c not in ef_left]
+            out = out.drop(columns=drop_after, errors="ignore")
+            added = [c for c in add_cols if c in out.columns and c not in before_cols]
+            if self.ctx.verbose:
+                print(
+                    f"  enrich {ef.get('file')!r} -> {spec.get('file')!r}: +{added}"
+                )
+        return out
+
+    @staticmethod
+    def _merge_one(
+        result: pd.DataFrame,
+        part: pd.DataFrame,
+        left: list[str],
+        right: list[str],
+        *,
+        dedupe: bool,
+        aggregate: dict[str, Any] | None,
+        overwrite_columns: list[str] | None = None,
+    ) -> pd.DataFrame:
+        for key in left:
+            if key not in result.columns:
+                raise KeyError(
+                    f"В таблице нет ключа merge {key!r}. Есть: {list(result.columns)}"
+                )
+        for key in right:
+            if key not in part.columns:
+                raise KeyError(
+                    f"В источнике нет ключа merge {key!r}. Есть: {list(part.columns)}"
+                )
+
+        result = MergeKeysParser.normalize_frame(result, left)
+        part = MergeKeysParser.normalize_frame(part, right)
+
+        if aggregate:
+            part = DataAggregator.apply(part, aggregate, right)
+        elif dedupe:
+            part = part.drop_duplicates(subset=right, keep="first")
+
+        overwrite = {str(c).strip() for c in (overwrite_columns or []) if str(c).strip()}
+        drop_from_part = [
+            c
+            for c in part.columns
+            if c in result.columns and c not in right and c not in overwrite
+        ]
+        part = part.drop(columns=drop_from_part, errors="ignore")
+
+        merged = result.merge(
+            part, left_on=left, right_on=right, how="left", suffixes=("_was", "")
+        )
+        for col in overwrite:
+            was = f"{col}_was"
+            if was not in merged.columns:
+                continue
+            if col in merged.columns:
+                new_vals = merged[col]
+                old_vals = merged[was]
+                use_new = new_vals.notna() & (new_vals.astype(str).str.strip() != "")
+                merged[col] = new_vals.where(use_new, old_vals)
+                merged = merged.drop(columns=[was], errors="ignore")
+            else:
+                merged = merged.rename(columns={was: col})
+        drop_after = [c for c in right if c not in left]
+        return merged.drop(columns=drop_after, errors="ignore")
+
+    @staticmethod
+    def _clear_when_keys_empty(
+        df: pd.DataFrame,
+        keys: list[str],
+        columns: list[str],
+    ) -> pd.DataFrame:
+        if not keys or not columns:
+            return df
+        out = df.copy()
+        empty = pd.Series(False, index=out.index)
+        for key in keys:
+            if key not in out.columns:
+                continue
+            empty = empty | out[key].fillna("").astype(str).str.strip().eq("")
+        for col in columns:
+            if col in out.columns:
+                out.loc[empty, col] = pd.NA
+        return out

@@ -1,0 +1,290 @@
+# =============================================================================
+# Запуск: python merge_columns.py  (или join_columns.py — одинаковые файлы)
+# ZW_CH6 (поле HgLvCust.) и ZW_CH6_Name — enrich_from (3805 ZW CH6) в config ниже
+# Скрипт: merge_columns.py + папка lib/ (версия 2026-06-04-oop-v1)
+# =============================================================================
+
+output_file: merge_columns.xlsx
+# Шаблон в именах файлов в sources (3805 Base.xlsx → при выборе 3804 станет 3804 Base.xlsx)
+sorg: "3805"
+# Папки SOrg: 3801 … 3806 (при запуске — меню или: python merge_columns.py -s 3805)
+# source_dir: "3805"
+# sorg_dirs: ["3801", "3802", "3803", "3804", "3805", "3806"]
+# Не перезаписывать sources из «Таблица 1.xlsx» (иначе пропадёт HgLvCust.)
+use_spec: false
+
+# Порядок по строке «Таблица» макета; имя колонки = Таблица, поле в файле = «Наименование поля»
+column_order:
+  - "SOrg."
+  - "Customer"
+  - "Name"
+  - "Trade Name"
+  - "Indus."
+  - "Ind.Code 1"
+  - "Tax Number 1"
+  - "A7"
+  - "A8"
+  - "SDst"
+  - "CGrp"
+  - "PG"
+  - "Grp4"
+  - "OrBlk"
+  - "OrBlk2"
+  - "CH6"
+  - "CH6_Name"
+  - "CH6_CGrp"
+  - "Check CH6_CGrp_KA"
+  - "ZW"
+  - "ZW_SO"
+  - "ZW_A7"
+  - "ZW_CGrp"
+  - "ZW_CH6"
+  - "ZW_CH6_Name"
+  - "Check CH6 Customer & ZW"
+  - "TN_CH6"
+  - "TN_CH6_Name"
+  - "Check CH6 Customer & TN"
+  - "Key"
+  - "Key_CH6"
+  - "Key_CH6_Name"
+  - "Check CH6 Customer & Key_CH6"
+
+# Customer Key — компактный ключ для справочника (CONCAT без разделителя + 380N)
+computed_columns:
+  - name: "Customer Key"
+    type: customer_key
+    suffix: "380N"
+    standard_parts: ["Grp4", "CGrp", "A7"]
+    at_work_parts: ["Grp4", "CGrp", "A7", "A8"]
+    at_work_education:
+      reason_column: "CH6_CGrp"
+      reason_values: ["P"]
+    business_type:
+      column: "CGrp"
+      values: ["P", "Q"]
+  # Key — CONCAT: Grp4+CGrp+A7+ZW_A7+Indus. (без разделителя)
+  # С A8: CH6_CGrp=P (At w/Ed) и CGrp∈{P,Q}
+  # Пустой Key: CH6_CGrp=P, но CGrp не P/Q (обратная проверка)
+  - name: "Key"
+    type: key
+    separator: ""
+    formula: "Grp4 & CGrp & A7 & ZW_A7 & Indus."
+    at_work_formula: "Grp4 & CGrp & A7 & A8 & ZW_A7 & Indus."
+    invalid_key: ""
+    at_work_education:
+      reason_column: "CH6_CGrp"
+      reason_values: ["P"]
+    business_type:
+      column: "CGrp"
+      values: ["P", "Q"]
+
+# excel_read_engine: calamine
+# excel_write_engine: xlsxwriter
+text_columns:
+  - "Tax Number 1"
+  - "A8"
+verbose: true
+
+checks:
+  - name: "Check CH6_CGrp_KA"
+    type: match_when_in_either
+    columns: ["CGrp", "CH6_CGrp"]
+    values: ["S", "F", "K", "Q"]
+    ok: "true"
+    fail: "false"
+
+  - name: "Check CH6 Customer & ZW"
+    type: ch6_customer_vs_zw_ch6
+    ch6_customer_column: "CH6"
+    zw_ch6_column: "ZW_CH6"
+    apply_when:
+      all_non_empty: ["CH6", "ZW_CH6", "ZW"]
+      column_in:
+        Grp4: ["IN"]
+    ok: "true"
+    fail: "false"
+
+  - name: "Check CH6 Customer & TN"
+    type: ch6_customer_vs_zw_ch6
+    ch6_customer_column: "CH6"
+    zw_ch6_column: "TN_CH6"
+    apply_when:
+      all_non_empty: ["CH6", "TN_CH6", "Trade Name"]
+    ok: "true"
+    fail: "false"
+
+  - name: "Check CH6 Customer & Key_CH6"
+    type: ch6_customer_vs_key_ch6
+    ch6_customer_column: "CH6"
+    compare_column: "Key_CH6"
+    apply_when:
+      all_non_empty: ["CH6", "Key_CH6"]
+    ok: "true"
+    fail: "false"
+
+post_sources:
+  - file: "Справочник Ключ-Иерархия"
+    sheet: 0
+    merge_on:
+      left: ["Customer Key"]
+      right: ["Ключ"]
+    dedupe: true
+    columns:
+      - name: "Key_CH6"
+        source: "Иерархия"
+      - name: "Key_CH6_Name"
+        source: "Название узла"
+
+sources:
+  - file: "3805 Base.xlsx"
+    sheet: 0
+    columns:
+      - "SOrg."
+      - "Customer"
+      - "Name"
+      - name: "Trade Name"
+        source: "Search Term 2"
+      - "Indus."
+      - "Ind.Code 1"
+      - "Tax Number 1"
+      - "A7"
+      - "A8"
+      - "SDst"
+      - "CGrp"
+      - "PG"
+      - "Grp4"
+      - "OrBlk"
+      - name: "OrBlk2"
+        optional: true
+
+  - file: "3805 Base.xlsx"
+    sheet: 0
+    merge_on:
+      left: ["SOrg.", "Customer"]
+      right: ["SOrg.", "Customer"]
+    dedupe: true
+    columns:
+      - "SOrg."
+      - "Customer"
+      - name: "CH6_Name"
+        source: "Text:Customer number of the higher-level"
+        optional: true
+
+  - file: "3805 CH6"
+    sheet: 0
+    merge_on:
+      left: ["SOrg.", "Customer"]
+      right: ["SOrg.", "Customer"]
+    dedupe: true
+    columns:
+      - name: "CH6"
+        source: "HgLvCust."
+
+  - file: "Справочник_CH6_CGrp.xlsx"
+    sheet: 0
+    merge_on:
+      left: ["CH6"]
+      right: ["6th level"]
+    dedupe: true
+    columns:
+      - name: "CH6_CGrp"
+        source: "6th level_CGrp"
+
+  - file: "Справочник_CH6_CGrp.xlsx"
+    sheet: 0
+    merge_on:
+      left: ["SOrg.", "Trade Name"]
+      right: ["SO Trade Name", "Trade Name"]
+    aggregate:
+      TN_CH6:
+        source: "6th level"
+        separator: ", "
+        unique: true
+      TN_CH6_Name:
+        source: "6th level_name"
+        separator: ", "
+        unique: true
+    merge_require_non_empty: ["Trade Name"]
+    columns:
+      - name: "TN_CH6"
+        source: "6th level"
+      - name: "TN_CH6_Name"
+        source: "6th level_name"
+
+  - file: "3805 ZW base"
+    sheet: 0
+    merge_on:
+      left: ["Customer"]
+      right: ["Customer"]
+    overwrite_columns: ["CGrp"]
+    aggregate:
+      CGrp:
+        source: "CGrp"
+        separator: ", "
+        unique: true
+    columns:
+      - "CGrp"
+
+  - file: "3805 ZW"
+    sheet: 0
+    merge_on:
+      left: ["SOrg.", "Customer"]
+      right: ["ZW_SO", "KUNNR"]
+    enrich_from:
+      - file: "3805 ZW CH6"
+        merge_on:
+          left: ["ZW_SO", "ZW"]
+          right: ["SOrg.", "Customer"]
+        dedupe: true
+        columns:
+          - name: "ZW_CH6"
+            source: "HgLvCust."
+          - name: "ZW_CH6_Name"
+            source: "Text:Customer number of the higher-level"
+    aggregate:
+      ZW:
+        source: "ZW"
+        separator: ", "
+        unique: true
+      ZW_CH6:
+        separator: ", "
+        unique: true
+      ZW_CH6_Name:
+        separator: ", "
+        unique: true
+    columns:
+      - name: "ZW"
+        source: "KTONR"
+      - name: "ZW_SO"
+        source: "VKORG"
+      - "KUNNR"
+
+  - file: "3805 ZW CH6"
+    sheet: 0
+    merge_on:
+      left: ["SOrg.", "Customer"]
+      right: ["SOrg.", "Customer"]
+    dedupe: true
+    columns:
+      - name: "ZW_CH6"
+        source: "HgLvCust."
+      - name: "ZW_CH6_Name"
+        source: "Text:Customer number of the higher-level"
+
+  - file: "3805 ZW base"
+    sheet: 0
+    merge_on:
+      left: ["SOrg.", "Customer"]
+      right: ["SOrg.", "Customer"]
+    aggregate:
+      ZW_A7:
+        source: "A7"
+        separator: ", "
+        unique: true
+      ZW_CGrp:
+        source: "CGrp"
+        separator: ", "
+        unique: true
+    columns:
+      - "A7"
+      - "CGrp"
