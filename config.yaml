@@ -190,20 +190,13 @@ sources:
       - name: "CH6_CGrp"
         source: "6th level_CGrp"
 
+  # TN_CH6 / TN_CH6_Name: каждый 6th level — отдельная строка (без aggregate)
   - file: "Справочник_CH6_CGrp.xlsx"
     sheet: 0
     merge_on:
       left: ["SOrg.", "Trade Name"]
       right: ["SO Trade Name", "Trade Name"]
-    aggregate:
-      TN_CH6:
-        source: "6th level"
-        separator: ", "
-        unique: true
-      TN_CH6_Name:
-        source: "6th level_name"
-        separator: ", "
-        unique: true
+    dedupe: false
     merge_require_non_empty: ["Trade Name"]
     columns:
       - name: "TN_CH6"
