@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import copy
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .constants import DEFAULT_SORG_DIRS
+from .constants import DEFAULT_SORG_DIRS, SORG_FILE_PREFIX_RE
 
 FOLDER_MISSING = "папка отсутствует"
 FOLDER_XLSX_COUNT = "Excel-файлов: {n}"
@@ -35,19 +36,40 @@ class SorgSelector:
 
     def config_for(self, selected: str) -> tuple[dict[str, Any], str]:
         """Подготовить config для выбранной папки SOrg (GUI / --sorg)."""
-        sorg = str(selected).strip()
-        if sorg not in self.choices:
+        folder = str(selected).strip()
+        if folder not in self.choices:
             print(
-                f"  ВНИМАНИЕ: папка SOrg {sorg!r} не в списке {self.choices!r}",
+                f"  ВНИМАНИЕ: папка SOrg {folder!r} не в списке {self.choices!r}",
                 file=sys.stderr,
             )
-        folder = self.base_dir / sorg
-        if not folder.is_dir():
+        data_path = self.base_dir / folder
+        if not data_path.is_dir():
             raise FileNotFoundError(
-                f"Папка SOrg {sorg!r} не найдена: {folder.resolve()}\n"
+                f"Папка SOrg {folder!r} не найдена: {data_path.resolve()}\n"
                 f"Создайте каталог и скопируйте в него Excel (как для шаблона {self.template!r})."
             )
-        return self._prepare(sorg), sorg
+        prepared, file_prefix = self._prepare(folder)
+        if file_prefix != folder:
+            print(
+                f"  Префикс в именах файлов: {file_prefix} "
+                f"(папка данных: {folder})",
+                file=sys.stderr,
+            )
+        return prepared, folder
+
+    @staticmethod
+    def detect_file_prefix(folder: Path) -> str | None:
+        """Определить 3801–3806 по префиксу в именах Excel в папке."""
+        if not folder.is_dir():
+            return None
+        counts: Counter[str] = Counter()
+        for path in list(folder.glob("*.xlsx")) + list(folder.glob("*.xls")):
+            match = SORG_FILE_PREFIX_RE.match(path.stem)
+            if match:
+                counts[match.group(0)] += 1
+        if not counts:
+            return None
+        return counts.most_common(1)[0][0]
 
     def folder_status(self, sorg: str) -> str:
         folder = self.base_dir / sorg
@@ -61,21 +83,25 @@ class SorgSelector:
         *,
         cli_sorg: str | None,
         no_menu: bool,
+        force_interactive: bool = False,
     ) -> tuple[dict[str, Any], str]:
         if cli_sorg:
             return self.config_for(cli_sorg)
         if no_menu:
             return self.config_for(self.default)
-        if sys.stdin.isatty():
+        if force_interactive or sys.stdin.isatty():
             return self.config_for(self._pick_interactive())
         return self.config_for(self.default)
 
-    def _prepare(self, sorg: str) -> dict[str, Any]:
+    def _prepare(self, folder: str) -> tuple[dict[str, Any], str]:
         out = copy.deepcopy(self.cfg)
-        if self.template != sorg:
-            self._rewrite_files(out, self.template, sorg)
-        out["source_dir"] = sorg
-        return out
+        data_path = self.base_dir / folder
+        file_prefix = self.detect_file_prefix(data_path) or folder
+        if self.template != file_prefix:
+            self._rewrite_files(out, self.template, file_prefix)
+        out["source_dir"] = folder
+        out["sorg"] = file_prefix
+        return out, file_prefix
 
     @staticmethod
     def _rewrite_files(node: Any, template: str, sorg: str) -> None:
@@ -90,27 +116,25 @@ class SorgSelector:
                 SorgSelector._rewrite_files(item, template, sorg)
 
     def _pick_interactive(self) -> str:
-        print("\n=== Выбор папки SOrg (данные для сборки) ===\n")
+        print("\n  Выбор папки SOrg (откуда читать Excel)\n")
         for i, name in enumerate(self.choices, 1):
             folder = self.base_dir / name
             n = self._count_xlsx(folder)
             exists = "да" if folder.is_dir() else "нет"
-            hint = ""
-            if name == self.default:
-                hint += " [по умолчанию из config]"
-            if name == self.template:
-                hint += f" [шаблон имён файлов: {self.template}]"
-            print(f"  {i}. {name}  — папка: {exists}, файлов Excel: {n}{hint}")
-        print("  0. Выход")
+            prefix = self.detect_file_prefix(folder)
+            prefix_hint = f", префикс файлов: {prefix}" if prefix else ""
+            hint = "  ← Enter" if name == self.default else ""
+            print(f"    {i}. {name}  — папка: {exists}, Excel: {n}{prefix_hint}{hint}")
+        print("    0. Выход")
 
         while True:
             try:
                 raw = input(
-                    f"\nНомер [1-{len(self.choices)}] или код "
+                    f"\n  Номер [1–{len(self.choices)}] или код "
                     f"({', '.join(self.choices)}), Enter = {self.default}: "
                 ).strip()
             except (EOFError, KeyboardInterrupt):
-                print("\nОтмена.")
+                print("\n  Отмена.")
                 raise SystemExit(130) from None
             if not raw:
                 return self.default

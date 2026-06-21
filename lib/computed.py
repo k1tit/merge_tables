@@ -5,6 +5,7 @@ from typing import Any
 
 import pandas as pd
 
+from .at_work_ref import norm_a8_lookup
 from .text_utils import TextNorm
 
 
@@ -14,7 +15,13 @@ class ComputedColumnsApplier:
     _FORMULA_SPLIT = re.compile(r"\s*&\s*")
 
     @classmethod
-    def apply(cls, df: pd.DataFrame, specs: list[dict[str, Any]] | None) -> pd.DataFrame:
+    def apply(
+        cls,
+        df: pd.DataFrame,
+        specs: list[dict[str, Any]] | None,
+        *,
+        a8_ref_values: frozenset[str] | None = None,
+    ) -> pd.DataFrame:
         if not specs:
             return df
 
@@ -24,10 +31,10 @@ class ComputedColumnsApplier:
             col_type = str(spec.get("type", "concat")).strip().lower()
 
             if col_type == "key":
-                out[name] = cls._key_series(out, spec)
+                out[name] = cls._key_series(out, spec, a8_ref_values=a8_ref_values)
                 continue
             if col_type == "customer_key":
-                out[name] = cls._customer_key_series(out, spec)
+                out[name] = cls._customer_key_series(out, spec, a8_ref_values=a8_ref_values)
                 continue
 
             parts: list[str] = list(spec["from"])
@@ -104,23 +111,68 @@ class ComputedColumnsApplier:
         return bool(reason) and reason in reason_vals
 
     @classmethod
-    def _is_at_work_reason(cls, row: pd.Series, spec: dict[str, Any]) -> bool:
-        return cls._is_at_work_edu(row, spec)
+    def _a8_column(cls, spec: dict[str, Any]) -> str:
+        aw = spec.get("at_work_education") or {}
+        return str(aw.get("a8_column", "A8"))
 
     @classmethod
-    def _key_mode(cls, row: pd.Series, spec: dict[str, Any]) -> str:
+    def _a8_in_reference(
+        cls,
+        row: pd.Series,
+        spec: dict[str, Any],
+        a8_ref_values: frozenset[str] | None,
+    ) -> bool:
+        if not a8_ref_values:
+            return False
+        col = cls._a8_column(spec)
+        if col not in row.index:
+            return False
+        a8 = norm_a8_lookup(row[col])
+        return bool(a8) and a8 in a8_ref_values
+
+    @classmethod
+    def _key_mode(
+        cls,
+        row: pd.Series,
+        spec: dict[str, Any],
+        *,
+        a8_ref_values: frozenset[str] | None = None,
+    ) -> str:
         """
         standard | at_work | invalid
 
-        - at_work (с A8): is_at_work_edu и business_type ∈ {P, Q}
-        - invalid: is_at_work_edu, но business_type ∉ {P, Q}
-        - standard: всё остальное (без A8), в т.ч. P/Q без повода At w/Ed
+        - at_work (с A8): CH6_CGrp=P, CGrp∈{P,Q}, A8 в справочнике At Work&Education
+        - invalid: CH6_CGrp=P, но CGrp ∉ {P, Q}
+        - standard: без A8 (в т.ч. At w/Ed, но A8 не в справочнике)
         """
         if not cls._is_at_work_edu(row, spec):
             return "standard"
-        if cls._is_business_pq(row, spec):
+        if not cls._is_business_pq(row, spec):
+            return "invalid"
+        if cls._a8_in_reference(row, spec, a8_ref_values):
             return "at_work"
-        return "invalid"
+        return "standard"
+
+    @classmethod
+    def _omit_parts_for_row(
+        cls,
+        row: pd.Series,
+        parts: list[str],
+        spec: dict[str, Any],
+    ) -> list[str]:
+        rules = spec.get("omit_parts_when") or []
+        if isinstance(rules, dict):
+            rules = [rules]
+        result = list(parts)
+        for rule in rules:
+            col = str(rule.get("column", "Grp4"))
+            vals = cls._norm_upper_set(rule.get("values"), [])
+            omit = {str(p) for p in (rule.get("parts") or [])}
+            if col not in row.index or not vals or not omit:
+                continue
+            if TextNorm.key_value(row[col]).upper() in vals:
+                result = [p for p in result if p not in omit]
+        return result
 
     @classmethod
     def _invalid_key_value(cls, spec: dict[str, Any]) -> str:
@@ -148,7 +200,13 @@ class ComputedColumnsApplier:
         return TextNorm.key_part(val)
 
     @classmethod
-    def _key_series(cls, df: pd.DataFrame, spec: dict[str, Any]) -> pd.Series:
+    def _key_series(
+        cls,
+        df: pd.DataFrame,
+        spec: dict[str, Any],
+        *,
+        a8_ref_values: frozenset[str] | None = None,
+    ) -> pd.Series:
         """Key = Grp4+CGrp+A7(+A8)+ZW_A7+Indus. (CONCAT без разделителя)."""
         sep = str(spec.get("separator", ""))
         standard = cls._resolve_key_parts(spec, at_work=False)
@@ -163,16 +221,23 @@ class ComputedColumnsApplier:
         result: list[str] = []
         for idx in df.index:
             row = df.loc[idx]
-            mode = cls._key_mode(row, spec)
+            mode = cls._key_mode(row, spec, a8_ref_values=a8_ref_values)
             if mode == "invalid":
                 result.append(invalid_val)
                 continue
             parts = at_work if mode == "at_work" else standard
+            parts = cls._omit_parts_for_row(row, parts, spec)
             result.append(cls._glue_parts(row, parts, sep, skip_empty=skip_empty))
         return pd.Series(result, index=df.index, dtype=object)
 
     @classmethod
-    def _customer_key_series(cls, df: pd.DataFrame, spec: dict[str, Any]) -> pd.Series:
+    def _customer_key_series(
+        cls,
+        df: pd.DataFrame,
+        spec: dict[str, Any],
+        *,
+        a8_ref_values: frozenset[str] | None = None,
+    ) -> pd.Series:
         suffix = str(spec.get("suffix", "380N"))
         standard = list(spec.get("standard_parts") or ["Grp4", "CGrp", "A7"])
         at_work = list(spec.get("at_work_parts") or ["Grp4", "CGrp", "A7", "A8"])
@@ -186,7 +251,7 @@ class ComputedColumnsApplier:
         result: list[str] = []
         for idx in df.index:
             row = df.loc[idx]
-            mode = cls._key_mode(row, spec)
+            mode = cls._key_mode(row, spec, a8_ref_values=a8_ref_values)
             if mode == "invalid":
                 result.append("")
                 continue

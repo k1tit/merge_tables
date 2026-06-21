@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .context import BuildContext
@@ -37,3 +39,19 @@ def open_build_log(base_dir: Path) -> Path:
     path = base_dir / "merge_build.log"
     path.write_text("", encoding="utf-8-sig")
     return path
+
+
+def make_console_log(log_file: Path) -> Callable[[str], None]:
+    """Вывод в консоль и дублирование в merge_build.log."""
+    log_file.write_text("", encoding="utf-8-sig")
+
+    def log(message: str) -> None:
+        text = message if message.endswith("\n") else message + "\n"
+        end = "" if message.endswith("\n") else "\n"
+        try:
+            print(message, end=end, flush=True)
+        except Exception:
+            pass
+        append_log_file(log_file, text)
+
+    return log

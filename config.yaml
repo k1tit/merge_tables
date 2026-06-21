@@ -7,6 +7,21 @@
 output_file: merge_columns.xlsx
 # Шаблон в именах файлов в sources (3805 Base.xlsx → при выборе 3804 станет 3804 Base.xlsx)
 sorg: "3805"
+# Справочник поводов потребления (A8) для At Work — 4-й элемент Key при совпадении
+at_work_a8_reference:
+  file: "Справочник At Work&Education.xlsx"
+  sheet: "At Work"
+  output_sheet: "Справочник At Work&Education"
+  column: "A8"
+  values:
+    - "216"
+    - "030"
+    - "044"
+    - "043"
+    - "025"
+    - "029"
+    - "042"
+    - "207"
 # Папки SOrg: 3801 … 3806 (при запуске — меню или: python merge_columns.py -s 3805)
 # source_dir: "3805"
 # sorg_dirs: ["3801", "3802", "3803", "3804", "3805", "3806"]
@@ -59,21 +74,27 @@ computed_columns:
     at_work_education:
       reason_column: "CH6_CGrp"
       reason_values: ["P"]
+      a8_column: "A8"
     business_type:
       column: "CGrp"
       values: ["P", "Q"]
   # Key — CONCAT: Grp4+CGrp+A7+ZW_A7+Indus. (без разделителя)
-  # С A8: CH6_CGrp=P (At w/Ed) и CGrp∈{P,Q}
+  # С A8: CH6_CGrp=P, CGrp∈{P,Q} и A8 в справочнике At Work&Education
   # Пустой Key: CH6_CGrp=P, но CGrp не P/Q (обратная проверка)
   - name: "Key"
     type: key
     separator: ""
     formula: "Grp4 & CGrp & A7 & ZW_A7 & Indus."
     at_work_formula: "Grp4 & CGrp & A7 & A8 & ZW_A7 & Indus."
+    omit_parts_when:
+      column: "Grp4"
+      values: ["DI"]
+      parts: ["ZW_A7"]
     invalid_key: ""
     at_work_education:
       reason_column: "CH6_CGrp"
       reason_values: ["P"]
+      a8_column: "A8"
     business_type:
       column: "CGrp"
       values: ["P", "Q"]
@@ -157,19 +178,6 @@ sources:
       - name: "OrBlk2"
         optional: true
 
-  - file: "3805 Base.xlsx"
-    sheet: 0
-    merge_on:
-      left: ["SOrg.", "Customer"]
-      right: ["SOrg.", "Customer"]
-    dedupe: true
-    columns:
-      - "SOrg."
-      - "Customer"
-      - name: "CH6_Name"
-        source: "Text:Customer number of the higher-level"
-        optional: true
-
   - file: "3805 CH6"
     sheet: 0
     merge_on:
@@ -179,6 +187,9 @@ sources:
     columns:
       - name: "CH6"
         source: "HgLvCust."
+      - name: "CH6_Name"
+        source: "Text:Customer number of the higher-level"
+        optional: true
 
   - file: "Справочник_CH6_CGrp.xlsx"
     sheet: 0
@@ -190,13 +201,21 @@ sources:
       - name: "CH6_CGrp"
         source: "6th level_CGrp"
 
-  # TN_CH6 / TN_CH6_Name: каждый 6th level — отдельная строка (без aggregate)
+  # TN_CH6 / TN_CH6_Name: несколько узлов на Trade Name — через запятую (aggregate)
   - file: "Справочник_CH6_CGrp.xlsx"
     sheet: 0
     merge_on:
       left: ["SOrg.", "Trade Name"]
       right: ["SO Trade Name", "Trade Name"]
-    dedupe: false
+    aggregate:
+      TN_CH6:
+        source: "6th level"
+        separator: ", "
+        unique: true
+      TN_CH6_Name:
+        source: "6th level_name"
+        separator: ", "
+        unique: true
     merge_require_non_empty: ["Trade Name"]
     columns:
       - name: "TN_CH6"

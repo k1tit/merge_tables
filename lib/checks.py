@@ -113,13 +113,13 @@ class CheckEngine:
         for idx in df.index:
             if not self._row_in_scope(df, idx, spec):
                 continue
-            ch6_val = TextNorm.key_value(df.at[idx, ch6_col])
-            compare_vals = {
-                TextNorm.key_value(v)
-                for v in TextNorm.split_aggregated(df.at[idx, compare_col], separator=sep)
-            }
-            compare_vals.discard("")
-            result.at[idx] = ok_label if ch6_val in compare_vals else fail_label
+            ch6_val = df.at[idx, ch6_col]
+            compare_val = df.at[idx, compare_col]
+            result.at[idx] = (
+                ok_label
+                if TextNorm.customer_node_in_list(ch6_val, compare_val, separator=sep)
+                else fail_label
+            )
         return result
 
     def _key_at_work_reverse(

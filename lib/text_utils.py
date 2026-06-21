@@ -75,6 +75,28 @@ class TextNorm:
         return n in ID_COLUMN_KEYS or n.startswith("customer")
 
     @staticmethod
+    def norm_customer_node(val: Any) -> str:
+        """Нормализация номера узла CH6 для сравнения в Check (38110501 = 38110501.0)."""
+        v = TextNorm.key_value(val)
+        if not v:
+            return ""
+        if v.isdigit():
+            return str(int(v))
+        return v.upper()
+
+    @staticmethod
+    def customer_node_in_list(ch6_val: Any, compare_val: Any, *, separator: str = ", ") -> bool:
+        ch6 = TextNorm.norm_customer_node(ch6_val)
+        if not ch6:
+            return False
+        candidates = {
+            TextNorm.norm_customer_node(v)
+            for v in TextNorm.split_aggregated(compare_val, separator=separator)
+        }
+        candidates.discard("")
+        return ch6 in candidates
+
+    @staticmethod
     def split_aggregated(val: Any, *, separator: str = ", ") -> list[str]:
         if val is None or (isinstance(val, float) and pd.isna(val)):
             return []

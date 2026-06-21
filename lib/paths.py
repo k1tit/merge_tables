@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pandas as pd
 
-from .constants import FILE_ALIASES
+from .constants import DEFAULT_SORG_DIRS, FILE_ALIASES
 from .text_utils import TextNorm
+
+_SORG_FILE_REST_RE = re.compile(r"^380[1-6]\s+(.*)$", re.IGNORECASE)
 
 
 class PathResolver:
@@ -42,6 +45,10 @@ class PathResolver:
             if candidate.exists():
                 return candidate
 
+        alt = self._resolve_by_sorg_prefix(rel_stem)
+        if alt is not None:
+            return alt
+
         if rel_stem in ("Справочник Ключ-Иерархия",) or "Ключ-Иерархия" in rel_stem:
             found = self._find_by_headers(["Ключ", "Узел"])
             if found:
@@ -71,4 +78,22 @@ class PathResolver:
                     or TextNorm.name("Узел") in found
                 ):
                     return path
+        return None
+
+    def _resolve_by_sorg_prefix(self, rel_stem: str) -> Path | None:
+        """«3805 Base» → файл «380* Base» в папке данных (если префикс в имени другой)."""
+        match = _SORG_FILE_REST_RE.match(rel_stem.strip())
+        if not match or not self.data_root.is_dir():
+            return None
+        rest = match.group(1).strip()
+        if not rest:
+            return None
+        for code in DEFAULT_SORG_DIRS:
+            for ext in (".xlsx", ".xls"):
+                candidate = self.data_root / f"{code} {rest}{ext}"
+                if candidate.exists():
+                    return candidate
+            candidate = self.data_root / f"{code} {rest}"
+            if candidate.exists():
+                return candidate
         return None

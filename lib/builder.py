@@ -11,6 +11,12 @@ from typing import Any
 import pandas as pd
 import yaml
 
+from .at_work_ref import (
+    at_work_output_sheet_name,
+    ensure_at_work_reference_file,
+    load_at_work_a8_values,
+    load_at_work_reference_df,
+)
 from .checks import CheckEngine
 from .computed import ComputedColumnsApplier
 from .constants import REQUIRED_CH6_COLUMNS, SCRIPT_VERSION
@@ -116,8 +122,18 @@ class ReportBuilder:
 
         emit(ctx, "  объединение источников (merge)...")
         result = merger.merge_all(frames, sources)
+        ref_path = ensure_at_work_reference_file(ctx.base_dir, cfg)
+        if ref_path and ctx.verbose:
+            emit(ctx, f"  справочник At Work&Education: {ref_path.name}")
+        a8_ref_values = load_at_work_a8_values(ctx.base_dir, cfg)
+        if ctx.verbose:
+            emit(ctx, f"  поводы A8 в справочнике At Work: {len(a8_ref_values)}")
         emit(ctx, "  вычисляемые колонки (Key, Customer Key)...")
-        result = ComputedColumnsApplier.apply(result, cfg.get("computed_columns"))
+        result = ComputedColumnsApplier.apply(
+            result,
+            cfg.get("computed_columns"),
+            a8_ref_values=a8_ref_values,
+        )
 
         post_sources = cfg.get("post_sources") or []
         if post_sources:
@@ -139,8 +155,24 @@ class ReportBuilder:
         self._require_columns(result)
         t2 = time.perf_counter()
         text_columns = [str(c) for c in (cfg.get("text_columns") or [])]
-        emit(ctx, f"  запись Excel ({ctx.write_engine})...")
-        self._write(result, out_path, ctx.write_engine, text_columns=text_columns)
+        ref_df = load_at_work_reference_df(ctx.base_dir, cfg)
+        extra_sheets: list[tuple[str, pd.DataFrame]] = []
+        if ref_df is not None and not ref_df.empty:
+            ref_sheet = at_work_output_sheet_name(cfg)
+            extra_sheets.append((ref_sheet, ref_df))
+            ref_col = str((cfg.get("at_work_a8_reference") or {}).get("column", "A8"))
+            if ref_col in ref_df.columns and ref_col not in text_columns:
+                text_columns = list(text_columns) + [ref_col]
+            emit(ctx, f"  запись Excel ({ctx.write_engine}) + лист {ref_sheet!r}...")
+        else:
+            emit(ctx, f"  запись Excel ({ctx.write_engine})...")
+        self._write(
+            result,
+            out_path,
+            ctx.write_engine,
+            text_columns=text_columns,
+            extra_sheets=extra_sheets or None,
+        )
         if ctx.verbose:
             emit(ctx, f"  запись: {time.perf_counter() - t2:.1f} с")
         self._print_summary(result, checks, ctx, t0)
@@ -159,7 +191,7 @@ class ReportBuilder:
         )
         emit(ctx, f"=== merge_columns {SCRIPT_VERSION} ===")
         emit(ctx, f"  config: {ctx.config_path}")
-        emit(ctx, f"  SOrg / source_dir: {ctx.sorg}  (шаблон: {ctx.sorg_template})")
+        emit(ctx, f"  Папка данных: {ctx.source_dir}, префикс файлов: {ctx.sorg}")
         emit(ctx, f"  output: {out_path.resolve()}")
         if not has_enrich:
             emit(ctx, f"  ОШИБКА КОНФИГА: нет enrich_from для {ctx.zw_ch6_file!r}")
@@ -220,6 +252,7 @@ class ReportBuilder:
         write_engine: str,
         *,
         text_columns: list[str] | None = None,
+        extra_sheets: list[tuple[str, pd.DataFrame]] | None = None,
     ) -> None:
         text_cols = [c for c in (text_columns or []) if c in df.columns]
         out = df.copy()
@@ -234,27 +267,53 @@ class ReportBuilder:
         engine = "xlsxwriter" if write_engine == "xlsxwriter" else "openpyxl"
         try:
             with pd.ExcelWriter(out_path, engine=engine) as writer:
-                sheet = "Sheet1"
-                out.to_excel(writer, index=False, sheet_name=sheet)
-                if not text_cols:
-                    return
-                if engine == "openpyxl":
-                    ws = writer.sheets[sheet]
-                    for col_name in text_cols:
-                        col_idx = out.columns.get_loc(col_name) + 1
-                        for row in range(2, len(out) + 2):
-                            ws.cell(row=row, column=col_idx).number_format = "@"
-                else:
-                    ws = writer.sheets[sheet]
-                    text_fmt = writer.book.add_format({"num_format": "@"})
-                    for col_name in text_cols:
-                        col_idx = out.columns.get_loc(col_name)
-                        ws.set_column(col_idx, col_idx, None, text_fmt)
+                main_sheet = "Sheet1"
+                out.to_excel(writer, index=False, sheet_name=main_sheet)
+                ReportBuilder._apply_text_columns(
+                    writer, engine, main_sheet, out, text_cols
+                )
+
+                for sheet_name, ref_raw in extra_sheets or []:
+                    ref_out = ref_raw.copy()
+                    ref_text = [
+                        c
+                        for c in (text_columns or [])
+                        if c in ref_out.columns
+                    ]
+                    for col in ref_text:
+                        ref_out[col] = ref_out[col].map(TextNorm.excel_text)
+                    ref_out.to_excel(writer, index=False, sheet_name=sheet_name[:31])
+                    ReportBuilder._apply_text_columns(
+                        writer, engine, sheet_name[:31], ref_out, ref_text
+                    )
         except PermissionError as e:
             raise PermissionError(
                 f"Не удалось записать {out_path}: файл открыт в Excel или заблокирован. "
                 f"Закройте merge_columns.xlsx и запустите скрипт снова."
             ) from e
+
+    @staticmethod
+    def _apply_text_columns(
+        writer: pd.ExcelWriter,
+        engine: str,
+        sheet: str,
+        df: pd.DataFrame,
+        text_cols: list[str],
+    ) -> None:
+        if not text_cols:
+            return
+        if engine == "openpyxl":
+            ws = writer.sheets[sheet]
+            for col_name in text_cols:
+                col_idx = df.columns.get_loc(col_name) + 1
+                for row in range(2, len(df) + 2):
+                    ws.cell(row=row, column=col_idx).number_format = "@"
+        else:
+            ws = writer.sheets[sheet]
+            text_fmt = writer.book.add_format({"num_format": "@"})
+            for col_name in text_cols:
+                col_idx = df.columns.get_loc(col_name)
+                ws.set_column(col_idx, col_idx, None, text_fmt)
 
     def _print_summary(
         self,

@@ -31,11 +31,12 @@ class BuildContext:
 
     @property
     def sorg(self) -> str:
-        return str(self.config.get("source_dir") or self.config.get("sorg") or "3805").strip()
+        """Префикс в именах выгрузок (3801–3806), не имя папки."""
+        return str(self.config.get("sorg") or "3805").strip()
 
     @property
     def sorg_template(self) -> str:
-        return str(self.config.get("sorg") or "3805").strip()
+        return self.sorg
 
     @property
     def zw_ch6_file(self) -> str:
