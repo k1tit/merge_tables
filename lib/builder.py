@@ -40,9 +40,10 @@ def excel_read_engine(preferred: str | None) -> str:
 
 
 def resolve_output_path(ctx: BuildContext) -> Path:
-    """Имя отчёта: output_file из config, плейсхолдер {sorg} → 3801–3806."""
+    """Имя отчёта: output_file из config, плейсхолдер {sorg} → 3801–3806 или ALL."""
     template = str(ctx.config.get("output_file", "merge_columns_{sorg}.xlsx"))
-    return ctx.base_dir / template.format(sorg=ctx.sorg)
+    sorg = str(ctx.config.get("sorg") or ctx.sorg).strip()
+    return ctx.base_dir / template.format(sorg=sorg)
 
 
 class ReportBuilder:
@@ -75,26 +76,16 @@ class ReportBuilder:
         )
         return self._build(ctx)
 
-    def _build(self, ctx: BuildContext) -> Path:
-        ctx.log_file = ctx.base_dir / "merge_build.log"
-        if not ctx.log:
-            ctx.log_file = open_build_log(ctx.base_dir)
-            emit(ctx, f"  журнал: {ctx.log_file}")
-        elif ctx.log:
-            ctx.log(f"  журнал: {ctx.log_file.resolve()}\n")
-
-        t0 = time.perf_counter()
+    def _build_dataframe(self, ctx: BuildContext) -> pd.DataFrame:
+        """Сборка таблицы отчёта без записи в Excel."""
         cfg = ctx.config
         sources: list[dict[str, Any]] = cfg.get("sources") or []
         if not sources:
             raise ValueError("В config.yaml не задан ни один источник (sources).")
 
-        out_path = resolve_output_path(ctx)
         reader = ExcelSourceReader(ctx)
         merger = DataMerger(ctx)
         keys = MergeKeysParser()
-
-        self._print_header(ctx, out_path, sources)
 
         frames: list[pd.DataFrame] = []
         n_src = len(sources)
@@ -114,17 +105,6 @@ class ReportBuilder:
                     key_excel=src.get("key_excel"),
                 )
             )
-        if ctx.verbose:
-            emit(ctx, f"  чтение ({ctx.read_engine}): {time.perf_counter() - t0:.1f} с")
-
-        t1 = time.perf_counter()
-        if ctx.verbose:
-            emit(ctx, f"  merge_columns {SCRIPT_VERSION}, источников: {n_src}")
-            if any(s.get("enrich_from") for s in sources):
-                emit(
-                    ctx,
-                    f"  enrich_from ({ctx.zw_ch6_file}: ZW_CH6, ZW_CH6_Name)",
-                )
 
         emit(ctx, "  объединение источников (merge)...")
         result = merger.merge_all(frames, sources)
@@ -149,7 +129,32 @@ class ReportBuilder:
         emit(ctx, "  проверки (Check ...)...")
         checks = cfg.get("checks")
         result = CheckEngine().apply(result, checks)
-        result = self._order_columns(result, cfg, ctx)
+        return self._order_columns(result, cfg, ctx)
+
+    def _build(self, ctx: BuildContext) -> Path:
+        ctx.log_file = ctx.base_dir / "merge_build.log"
+        if not ctx.log:
+            ctx.log_file = open_build_log(ctx.base_dir)
+            emit(ctx, f"  журнал: {ctx.log_file}")
+        elif ctx.log:
+            ctx.log(f"  журнал: {ctx.log_file.resolve()}\n")
+
+        t0 = time.perf_counter()
+        sources: list[dict[str, Any]] = ctx.config.get("sources") or []
+        out_path = resolve_output_path(ctx)
+        self._print_header(ctx, out_path, sources)
+
+        t1 = time.perf_counter()
+        if ctx.verbose:
+            n_src = len(sources)
+            emit(ctx, f"  merge_columns {SCRIPT_VERSION}, источников: {n_src}")
+            if any(s.get("enrich_from") for s in sources):
+                emit(
+                    ctx,
+                    f"  enrich_from ({ctx.zw_ch6_file}: ZW_CH6, ZW_CH6_Name)",
+                )
+
+        result = self._build_dataframe(ctx)
 
         if ctx.verbose:
             emit(
@@ -158,6 +163,17 @@ class ReportBuilder:
                 f"строк: {len(result)}",
             )
 
+        return self._write_result(ctx, result, out_path, t0)
+
+    def _write_result(
+        self,
+        ctx: BuildContext,
+        result: pd.DataFrame,
+        out_path: Path,
+        t0: float,
+    ) -> Path:
+        cfg = ctx.config
+        checks = cfg.get("checks")
         self._require_columns(result)
         t2 = time.perf_counter()
         text_columns = [str(c) for c in (cfg.get("text_columns") or [])]
@@ -183,6 +199,66 @@ class ReportBuilder:
             emit(ctx, f"  запись: {time.perf_counter() - t2:.1f} с")
         self._print_summary(result, checks, ctx, t0)
         return out_path
+
+    def run_all(
+        self,
+        runs: list[tuple[dict[str, Any], str]],
+        log: Callable[[str], None] | None = None,
+    ) -> Path:
+        """Сборка одного отчёта из всех папок SOrg."""
+        if not runs:
+            raise ValueError("Нет папок SOrg для сборки")
+
+        all_cfg = dict(runs[0][0])
+        all_cfg["sorg"] = "ALL"
+        all_cfg.pop("source_dir", None)
+
+        ctx = BuildContext(
+            base_dir=self.base_dir,
+            config_path=self.config_path,
+            config=all_cfg,
+            read_engine=excel_read_engine(all_cfg.get("excel_read_engine")),
+            write_engine=str(all_cfg.get("excel_write_engine", "openpyxl")),
+            lookup_dedupe=bool(all_cfg.get("lookup_dedupe", True)),
+            verbose=bool(all_cfg.get("verbose", True)),
+            default_merge=all_cfg.get("merge_on"),
+            log=log,
+        )
+        ctx.log_file = ctx.base_dir / "merge_build.log"
+        if not ctx.log:
+            ctx.log_file = open_build_log(ctx.base_dir)
+            emit(ctx, f"  журнал: {ctx.log_file}")
+        elif ctx.log:
+            ctx.log(f"  журнал: {ctx.log_file.resolve()}\n")
+
+        t0 = time.perf_counter()
+        folders = [folder for _, folder in runs]
+        out_path = resolve_output_path(ctx)
+        emit(ctx, f"=== merge_columns {SCRIPT_VERSION} — все SOrg ===")
+        emit(ctx, f"  config: {ctx.config_path}")
+        emit(ctx, f"  папки: {', '.join(folders)}")
+        emit(ctx, f"  output: {out_path.resolve()}")
+
+        parts: list[pd.DataFrame] = []
+        for i, (cfg, folder) in enumerate(runs, 1):
+            emit(ctx, f"\n--- SOrg {folder} [{i}/{len(runs)}] ---")
+            sub_ctx = BuildContext(
+                base_dir=self.base_dir,
+                config_path=self.config_path,
+                config=cfg,
+                read_engine=ctx.read_engine,
+                write_engine=ctx.write_engine,
+                lookup_dedupe=ctx.lookup_dedupe,
+                verbose=ctx.verbose,
+                default_merge=cfg.get("merge_on"),
+                log=log,
+                log_file=ctx.log_file,
+            )
+            parts.append(self._build_dataframe(sub_ctx))
+
+        result = pd.concat(parts, ignore_index=True)
+        emit(ctx, f"\n  итого строк: {len(result)}")
+        return self._write_result(ctx, result, out_path, t0)
 
     def _print_header(
         self,
@@ -374,3 +450,11 @@ def build_merge(
     log: Callable[[str], None] | None = None,
 ) -> Path:
     return ReportBuilder(config_path, cfg=cfg).run(log=log)
+
+
+def build_merge_all(
+    config_path: Path,
+    runs: list[tuple[dict[str, Any], str]],
+    log: Callable[[str], None] | None = None,
+) -> Path:
+    return ReportBuilder(config_path).run_all(runs, log=log)

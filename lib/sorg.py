@@ -10,6 +10,8 @@ from .constants import DEFAULT_SORG_DIRS, SORG_FILE_PREFIX_RE
 
 FOLDER_MISSING = "папка отсутствует"
 FOLDER_XLSX_COUNT = "Excel-файлов: {n}"
+ALL_SORG_LABEL = "ALL"
+ALL_MENU_CHOICE = "__all__"
 
 
 class SorgSelector:
@@ -33,6 +35,24 @@ class SorgSelector:
     @property
     def default(self) -> str:
         return str(self.cfg.get("source_dir") or self.template).strip()
+
+    def available_folders(self) -> list[str]:
+        """Папки SOrg с хотя бы одним Excel."""
+        return [
+            name
+            for name in self.choices
+            if (self.base_dir / name).is_dir() and self._count_xlsx(self.base_dir / name) > 0
+        ]
+
+    def prepare_all(self) -> list[tuple[dict[str, Any], str]]:
+        """Конфиг для каждой доступной папки SOrg."""
+        folders = self.available_folders()
+        if not folders:
+            raise FileNotFoundError(
+                "Нет папок SOrg с Excel-файлами. "
+                f"Ожидаются каталоги {', '.join(self.choices)} в {self.base_dir.resolve()}"
+            )
+        return [self.config_for(folder) for folder in folders]
 
     def config_for(self, selected: str) -> tuple[dict[str, Any], str]:
         """Подготовить config для выбранной папки SOrg (GUI / --sorg)."""
@@ -83,14 +103,30 @@ class SorgSelector:
         *,
         cli_sorg: str | None,
         no_menu: bool,
-    ) -> tuple[dict[str, Any], str]:
+        cli_all: bool = False,
+    ) -> tuple[dict[str, Any] | None, str, list[tuple[dict[str, Any], str]] | None]:
+        """
+        Один SOrg: (cfg, folder, None).
+        Все папки: (None, ALL_SORG_LABEL, [(cfg, folder), ...]).
+        """
+        if cli_all:
+            runs = self.prepare_all()
+            return None, ALL_SORG_LABEL, runs
         if cli_sorg:
-            return self.config_for(cli_sorg)
+            cfg, folder = self.config_for(cli_sorg)
+            return cfg, folder, None
         if no_menu:
-            return self.config_for(self.default)
+            cfg, folder = self.config_for(self.default)
+            return cfg, folder, None
         if sys.stdin.isatty():
-            return self.config_for(self._pick_interactive())
-        return self.config_for(self.default)
+            picked = self._pick_interactive()
+            if picked == ALL_MENU_CHOICE:
+                runs = self.prepare_all()
+                return None, ALL_SORG_LABEL, runs
+            cfg, folder = self.config_for(picked)
+            return cfg, folder, None
+        cfg, folder = self.config_for(self.default)
+        return cfg, folder, None
 
     def _prepare(self, folder: str) -> tuple[dict[str, Any], str]:
         out = copy.deepcopy(self.cfg)
@@ -98,9 +134,21 @@ class SorgSelector:
         file_prefix = self.detect_file_prefix(data_path) or folder
         if self.template != file_prefix:
             self._rewrite_files(out, self.template, file_prefix)
+        self._rewrite_customer_key_suffix(out, file_prefix)
         out["source_dir"] = folder
         out["sorg"] = file_prefix
         return out, file_prefix
+
+    @staticmethod
+    def _rewrite_customer_key_suffix(node: Any, sorg: str) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "customer_key" and str(node.get("suffix", "")) == "380N":
+                node["suffix"] = sorg
+            for val in node.values():
+                SorgSelector._rewrite_customer_key_suffix(val, sorg)
+        elif isinstance(node, list):
+            for item in node:
+                SorgSelector._rewrite_customer_key_suffix(item, sorg)
 
     @staticmethod
     def _rewrite_files(node: Any, template: str, sorg: str) -> None:
@@ -124,6 +172,9 @@ class SorgSelector:
             prefix_hint = f", префикс файлов: {prefix}" if prefix else ""
             hint = "  ← Enter" if name == self.default else ""
             print(f"    {i}. {name}  — папка: {exists}, Excel: {n}{prefix_hint}{hint}")
+        avail = self.available_folders()
+        if avail:
+            print(f"    a. Все папки ({', '.join(avail)})")
         print("    0. Выход")
 
         while True:
@@ -139,6 +190,8 @@ class SorgSelector:
                 return self.default
             if raw == "0":
                 raise SystemExit(0)
+            if raw.lower() in ("a", "all", "все", "*") and avail:
+                return ALL_MENU_CHOICE
             if raw.isdigit():
                 num = int(raw)
                 if 1 <= num <= len(self.choices):

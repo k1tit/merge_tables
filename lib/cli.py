@@ -7,10 +7,10 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-from .builder import build_merge
+from .builder import build_merge, build_merge_all
 from .constants import REQUIRED_CH6_COLUMNS
 from .log_sink import make_console_log
-from .sorg import SorgSelector
+from .sorg import ALL_SORG_LABEL, SorgSelector
 
 
 class Application:
@@ -27,6 +27,12 @@ class Application:
             default=Path(__file__).resolve().parent.parent / "config.yaml",
         )
         parser.add_argument("-s", "--sorg", metavar="3805", help="Папка SOrg без меню")
+        parser.add_argument(
+            "-a",
+            "--all",
+            action="store_true",
+            help="Собрать из всех папок SOrg сразу (3801–3806)",
+        )
         parser.add_argument("--no-menu", action="store_true", help="Без меню SOrg")
         parser.add_argument("-q", "--quiet", action="store_true", help="Минимум вывода")
         return parser.parse_args(argv)
@@ -41,19 +47,32 @@ class Application:
                 raw_cfg = yaml.safe_load(f)
 
             selector = SorgSelector(base_dir, raw_cfg)
-            cfg, selected = selector.resolve(
+            cfg, selected, all_runs = selector.resolve(
                 cli_sorg=self.args.sorg,
                 no_menu=self.args.no_menu or bool(self.args.sorg),
+                cli_all=self.args.all,
             )
 
-            cfg_run = dict(cfg)
+            if all_runs:
+                cfg_run = dict(all_runs[0][0])
+            else:
+                cfg_run = dict(cfg or {})
+
             if self.args.quiet:
                 cfg_run["verbose"] = False
+            elif self.args.all or selected == ALL_SORG_LABEL:
+                folders = [f for _, f in all_runs or []]
+                print(f"SOrg: все ({', '.join(folders)})")
             elif self.args.sorg or self.args.no_menu:
                 print(f"SOrg: {selected}")
 
             log = None if self.args.quiet else make_console_log(log_file)
-            out = build_merge(config_path, cfg=cfg_run, log=log)
+
+            if all_runs:
+                out = build_merge_all(config_path, all_runs, log=log)
+            else:
+                out = build_merge(config_path, cfg=cfg_run, log=log)
+
             return self._verify_output(out, quiet=self.args.quiet)
         except (FileNotFoundError, KeyError, ValueError, PermissionError) as e:
             print(f"Ошибка: {e}", file=sys.stderr)
