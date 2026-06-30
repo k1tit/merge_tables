@@ -93,6 +93,57 @@ text_columns:
 leading_zero_columns:
   A8: 2
   PG: 2
+
+# Фон всего столбца (шапка + данные) в итоговом Excel
+column_colors:
+  D7EACF:
+    - "SOrg."
+    - "Customer"
+    - "Name"
+    - "Trade Name"
+    - "Indus."
+    - "Ind.Code 1"
+    - "Tax Number 1"
+    - "A7"
+    - "A8"
+    - "SDst"
+    - "CGrp"
+    - "PG"
+    - "Grp4"
+    - "OrBlk"
+    - "OrBlk2"
+  E4DDF3:
+    - "CH6"
+    - "CH6_Name"
+  F5E7B8:
+    - "CH6_CGrp"
+  F6D8C8:
+    - "Check CH6_CGrp_KA"
+    - "Check CH6 Customer & ZW"
+    - "Check CH6 Customer & TN"
+    - "Check_TN_CGrp"
+    - "Check CH6 Customer & Key_CH6"
+  DCECF8:
+    - "ZW"
+    - "ZW_SO"
+    - "ZW_A7"
+    - "ZW_CGrp"
+    - "ZW_CH6"
+    - "ZW_CH6_Name"
+  D8E6E4:
+    - "TN_CH6"
+    - "TN_CH6_Name"
+    - "TN_CGrp"
+  D8E0F2:
+    - "Key"
+    - "Key_CH6"
+    - "Key_CH6_Name"
+
+# Автоподбор ширины столбцов в Excel (по шапке + выборке строк)
+excel_autofit_columns: true
+excel_autofit_sample_rows: 1000
+excel_autofit_max_width: 55
+
 verbose: true
 
 checks:

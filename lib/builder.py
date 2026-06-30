@@ -194,6 +194,10 @@ class ReportBuilder:
             ctx.write_engine,
             text_columns=text_columns,
             leading_zero_columns=cfg.get("leading_zero_columns"),
+            column_colors=cfg.get("column_colors"),
+            autofit_columns=bool(cfg.get("excel_autofit_columns", True)),
+            autofit_sample_rows=int(cfg.get("excel_autofit_sample_rows", 1000)),
+            autofit_max_width=int(cfg.get("excel_autofit_max_width", 55)),
             extra_sheets=extra_sheets or None,
         )
         if ctx.verbose:
@@ -329,6 +333,140 @@ class ReportBuilder:
             )
 
     @staticmethod
+    def _normalize_hex_color(color: str) -> str:
+        return str(color).strip().lstrip("#").upper()
+
+    @staticmethod
+    def _column_color_map(
+        column_colors: dict[str, Any] | None,
+        df: pd.DataFrame,
+    ) -> dict[str, str]:
+        """Имя колонки → RGB без # (последний цвет побеждает при дублях)."""
+        if not column_colors:
+            return {}
+        out: dict[str, str] = {}
+        for raw_color, cols in column_colors.items():
+            hex_color = ReportBuilder._normalize_hex_color(str(raw_color))
+            items = cols if isinstance(cols, list) else [cols]
+            for col in items:
+                name = str(col).strip()
+                if name in df.columns:
+                    out[name] = hex_color
+        return out
+
+    @staticmethod
+    def _apply_column_colors(
+        writer: pd.ExcelWriter,
+        engine: str,
+        sheet: str,
+        df: pd.DataFrame,
+        column_colors: dict[str, str],
+        *,
+        text_cols: list[str] | None = None,
+    ) -> None:
+        if not column_colors:
+            return
+
+        text_set = set(text_cols or [])
+        max_row = len(df) + 1
+
+        if engine == "openpyxl":
+            from openpyxl.formatting.rule import FormulaRule
+            from openpyxl.styles import PatternFill
+            from openpyxl.utils import get_column_letter
+
+            ws = writer.sheets[sheet]
+            for col_name, hex_color in column_colors.items():
+                col_idx = df.columns.get_loc(col_name) + 1
+                col_letter = get_column_letter(col_idx)
+                fill = PatternFill(
+                    start_color=hex_color,
+                    end_color=hex_color,
+                    fill_type="solid",
+                )
+                ws.conditional_formatting.add(
+                    f"{col_letter}1:{col_letter}{max_row}",
+                    FormulaRule(formula=["TRUE"], fill=fill),
+                )
+            return
+
+        ws = writer.sheets[sheet]
+        for col_name, hex_color in column_colors.items():
+            col_idx = df.columns.get_loc(col_name)
+            props: dict[str, str] = {"bg_color": f"#{hex_color}"}
+            if col_name in text_set:
+                props["num_format"] = "@"
+            col_fmt = writer.book.add_format(props)
+            ws.set_column(col_idx, col_idx, None, col_fmt)
+
+    @staticmethod
+    def _estimate_column_widths(
+        df: pd.DataFrame,
+        *,
+        sample_rows: int = 1000,
+        max_width: int = 55,
+        padding: int = 2,
+    ) -> dict[str, float]:
+        """Ширина столбца по шапке и выборке данных (без полного скана 200k+ строк)."""
+        if df.empty:
+            return {str(col): float(len(str(col)) + padding) for col in df.columns}
+
+        n = len(df)
+        if n <= sample_rows:
+            sample = df
+        else:
+            half = max(1, sample_rows // 2)
+            sample = pd.concat([df.head(half), df.tail(sample_rows - half)])
+
+        widths: dict[str, float] = {}
+        for col in df.columns:
+            col_name = str(col)
+            header_len = len(col_name)
+            series = sample[col].fillna("").astype(str).str.strip()
+            data_max = int(series.str.len().max()) if len(series) else 0
+            width = min(max(header_len, data_max) + padding, max_width)
+            widths[col_name] = float(max(width, header_len + padding))
+        return widths
+
+    @staticmethod
+    def _apply_column_widths_openpyxl(
+        writer: pd.ExcelWriter,
+        sheet: str,
+        df: pd.DataFrame,
+        widths: dict[str, float],
+    ) -> None:
+        from openpyxl.utils import get_column_letter
+
+        ws = writer.sheets[sheet]
+        for col_name, width in widths.items():
+            if col_name not in df.columns:
+                continue
+            col_idx = df.columns.get_loc(col_name) + 1
+            ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+    @staticmethod
+    def _apply_xlsxwriter_layout(
+        writer: pd.ExcelWriter,
+        sheet: str,
+        df: pd.DataFrame,
+        *,
+        widths: dict[str, float],
+        color_map: dict[str, str],
+        text_cols: list[str],
+    ) -> None:
+        ws = writer.sheets[sheet]
+        text_set = set(text_cols)
+        for col_idx, col_name in enumerate(df.columns):
+            props: dict[str, str] = {}
+            if col_name in text_set:
+                props["num_format"] = "@"
+            if col_name in color_map:
+                props["bg_color"] = f"#{color_map[col_name]}"
+            col_fmt = writer.book.add_format(props) if props else None
+            width = widths.get(str(col_name))
+            ws.set_column(col_idx, col_idx, width, col_fmt)
+
+    @staticmethod
     def _write(
         df: pd.DataFrame,
         out_path: Path,
@@ -336,10 +474,15 @@ class ReportBuilder:
         *,
         text_columns: list[str] | None = None,
         leading_zero_columns: dict[str, int] | None = None,
+        column_colors: dict[str, Any] | None = None,
+        autofit_columns: bool = True,
+        autofit_sample_rows: int = 1000,
+        autofit_max_width: int = 55,
         extra_sheets: list[tuple[str, pd.DataFrame]] | None = None,
     ) -> None:
         text_cols = [c for c in (text_columns or []) if c in df.columns]
         leading_zero = leading_zero_columns or {}
+        color_map = ReportBuilder._column_color_map(column_colors, df)
         out = df.copy()
         for col in text_cols:
             out[col] = out[col].map(
@@ -352,13 +495,44 @@ class ReportBuilder:
             return
 
         engine = "xlsxwriter" if write_engine == "xlsxwriter" else "openpyxl"
+        widths = (
+            ReportBuilder._estimate_column_widths(
+                out,
+                sample_rows=autofit_sample_rows,
+                max_width=autofit_max_width,
+            )
+            if autofit_columns
+            else {}
+        )
         try:
             with pd.ExcelWriter(out_path, engine=engine) as writer:
                 main_sheet = "Sheet1"
                 out.to_excel(writer, index=False, sheet_name=main_sheet)
-                ReportBuilder._apply_text_columns(
-                    writer, engine, main_sheet, out, text_cols
-                )
+                if engine == "xlsxwriter":
+                    ReportBuilder._apply_xlsxwriter_layout(
+                        writer,
+                        main_sheet,
+                        out,
+                        widths=widths,
+                        color_map=color_map,
+                        text_cols=text_cols,
+                    )
+                else:
+                    ReportBuilder._apply_text_columns(
+                        writer, engine, main_sheet, out, text_cols
+                    )
+                    ReportBuilder._apply_column_colors(
+                        writer,
+                        engine,
+                        main_sheet,
+                        out,
+                        color_map,
+                        text_cols=text_cols,
+                    )
+                    if widths:
+                        ReportBuilder._apply_column_widths_openpyxl(
+                            writer, main_sheet, out, widths
+                        )
 
                 for sheet_name, ref_raw in extra_sheets or []:
                     ref_out = ref_raw.copy()
