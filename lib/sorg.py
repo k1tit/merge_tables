@@ -36,21 +36,30 @@ class SorgSelector:
     def default(self) -> str:
         return str(self.cfg.get("source_dir") or self.template).strip()
 
+    def existing_folders(self) -> list[str]:
+        """Существующие каталоги SOrg (3801–3806)."""
+        return [name for name in self.choices if (self.base_dir / name).is_dir()]
+
     def available_folders(self) -> list[str]:
         """Папки SOrg с хотя бы одним Excel."""
         return [
             name
-            for name in self.choices
-            if (self.base_dir / name).is_dir() and self._count_xlsx(self.base_dir / name) > 0
+            for name in self.existing_folders()
+            if self._count_xlsx(self.base_dir / name) > 0
         ]
 
     def prepare_all(self) -> list[tuple[dict[str, Any], str]]:
-        """Конфиг для каждой доступной папки SOrg."""
-        folders = self.available_folders()
+        """Конфиг для каждой папки SOrg (сначала с Excel, иначе все существующие)."""
+        folders = self.available_folders() or self.existing_folders()
         if not folders:
             raise FileNotFoundError(
-                "Нет папок SOrg с Excel-файлами. "
-                f"Ожидаются каталоги {', '.join(self.choices)} в {self.base_dir.resolve()}"
+                "Нет папок SOrg. "
+                f"Создайте каталоги {', '.join(self.choices)} в {self.base_dir.resolve()}"
+            )
+        if not self.available_folders():
+            print(
+                "  ВНИМАНИЕ: Excel в папках SOrg не найден — сборка по всем каталогам.",
+                file=sys.stderr,
             )
         return [self.config_for(folder) for folder in folders]
 
@@ -172,16 +181,18 @@ class SorgSelector:
             prefix_hint = f", префикс файлов: {prefix}" if prefix else ""
             hint = "  ← Enter" if name == self.default else ""
             print(f"    {i}. {name}  — папка: {exists}, Excel: {n}{prefix_hint}{hint}")
-        avail = self.available_folders()
-        if avail:
-            print(f"    a. Все папки ({', '.join(avail)})")
+        existing = self.existing_folders()
+        if existing:
+            with_data = self.available_folders()
+            scope = ", ".join(with_data) if with_data else ", ".join(existing)
+            print(f"    a. Все папки — расширенная проверка ({scope})")
         print("    0. Выход")
 
         while True:
             try:
                 raw = input(
-                    f"\n  Номер [1–{len(self.choices)}] или код "
-                    f"({', '.join(self.choices)}), Enter = {self.default}: "
+                    f"\n  Номер [1–{len(self.choices)}], код "
+                    f"({', '.join(self.choices)}), a = все папки, Enter = {self.default}: "
                 ).strip()
             except (EOFError, KeyboardInterrupt):
                 print("\n  Отмена.")
@@ -190,7 +201,7 @@ class SorgSelector:
                 return self.default
             if raw == "0":
                 raise SystemExit(0)
-            if raw.lower() in ("a", "all", "все", "*") and avail:
+            if raw.lower() in ("a", "all", "все", "*") and existing:
                 return ALL_MENU_CHOICE
             if raw.isdigit():
                 num = int(raw)
@@ -199,12 +210,16 @@ class SorgSelector:
             if raw in self.choices:
                 return raw
             print(
-                f"  Неверный ввод. Укажите 1–{len(self.choices)}, код папки "
-                f"({', '.join(self.choices)}) или Enter."
+                f"  Неверный ввод. Укажите 1–{len(self.choices)}, код папки, "
+                f"a = все папки, или Enter."
             )
 
     @staticmethod
     def _count_xlsx(folder: Path) -> int:
         if not folder.is_dir():
             return 0
-        return len(list(folder.glob("*.xlsx")) + list(folder.glob("*.xls")))
+        seen: set[str] = set()
+        for pattern in ("*.xlsx", "*.xls", "*.XLSX", "*.XLS"):
+            for path in folder.glob(pattern):
+                seen.add(path.name.lower())
+        return len(seen)

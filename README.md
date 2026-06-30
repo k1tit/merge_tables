@@ -25,7 +25,7 @@ python merge_columns.py --all
 
 Результат: **`merge_columns_ALL.xlsx`** — данные из всех папок, где есть Excel.
 
-В интерактивном меню (`python merge_columns.py`): введите **`a`**.
+В интерактивном меню (`python merge_columns.py`): пункт **`a`** — расширенная проверка всех папок.
 
 ## Данные
 
