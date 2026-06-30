@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""
-Собирает merge_columns.xlsx из указанных колонок исходных Excel-файлов.
-Настройка — в config.yaml (рядом со скриптом).
-
-Логика в пакете lib/ (классы ReportBuilder, SorgSelector, DataMerger, …).
-"""
+"""Сборка merge_columns.xlsx из config.yaml."""
 
 from __future__ import annotations
 

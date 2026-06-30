@@ -1,11 +1,4 @@
-# =============================================================================
-# Запуск: python merge_columns.py  (или join_columns.py — одинаковые файлы)
-# ZW_CH6 (поле HgLvCust.) и ZW_CH6_Name — enrich_from (3805 ZW CH6) в config ниже
-# Скрипт: merge_columns.py + папка lib/ (версия 2026-06-04-oop-v1)
-# =============================================================================
-
-output_file: merge_columns.xlsx
-# Шаблон в именах файлов в sources (3805 Base.xlsx → при выборе 3804 станет 3804 Base.xlsx)
+output_file: merge_columns_{sorg}.xlsx
 sorg: "3805"
 # Справочник поводов потребления (A8) для At Work — 4-й элемент Key при совпадении
 at_work_a8_reference:
@@ -22,13 +15,6 @@ at_work_a8_reference:
     - "029"
     - "042"
     - "207"
-# Папки SOrg: 3801 … 3806 (при запуске — меню или: python merge_columns.py -s 3805)
-# source_dir: "3805"
-# sorg_dirs: ["3801", "3802", "3803", "3804", "3805", "3806"]
-# Не перезаписывать sources из «Таблица 1.xlsx» (иначе пропадёт HgLvCust.)
-use_spec: false
-
-# Порядок по строке «Таблица» макета; имя колонки = Таблица, поле в файле = «Наименование поля»
 column_order:
   - "SOrg."
   - "Customer"
@@ -64,7 +50,6 @@ column_order:
   - "Key_CH6_Name"
   - "Check CH6 Customer & Key_CH6"
 
-# Customer Key — компактный ключ для справочника (CONCAT без разделителя + 380N)
 computed_columns:
   - name: "Customer Key"
     type: customer_key
@@ -78,9 +63,6 @@ computed_columns:
     business_type:
       column: "CGrp"
       values: ["P", "Q"]
-  # Key — CONCAT: Grp4+CGrp+A7+ZW_A7+Indus. (без разделителя)
-  # С A8: CH6_CGrp=P, CGrp∈{P,Q} и A8 в справочнике At Work&Education
-  # Пустой Key: CH6_CGrp=P, но CGrp не P/Q (обратная проверка)
   - name: "Key"
     type: key
     separator: ""
@@ -99,8 +81,6 @@ computed_columns:
       column: "CGrp"
       values: ["P", "Q"]
 
-# excel_read_engine: calamine
-# excel_write_engine: xlsxwriter
 text_columns:
   - "Tax Number 1"
   - "A8"
@@ -201,7 +181,6 @@ sources:
       - name: "CH6_CGrp"
         source: "6th level_CGrp"
 
-  # TN_CH6 / TN_CH6_Name: несколько узлов на Trade Name — через запятую (aggregate)
   - file: "Справочник_CH6_CGrp.xlsx"
     sheet: 0
     merge_on:

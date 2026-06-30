@@ -83,13 +83,12 @@ class SorgSelector:
         *,
         cli_sorg: str | None,
         no_menu: bool,
-        force_interactive: bool = False,
     ) -> tuple[dict[str, Any], str]:
         if cli_sorg:
             return self.config_for(cli_sorg)
         if no_menu:
             return self.config_for(self.default)
-        if force_interactive or sys.stdin.isatty():
+        if sys.stdin.isatty():
             return self.config_for(self._pick_interactive())
         return self.config_for(self.default)
 

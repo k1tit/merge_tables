@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 def emit(ctx: BuildContext, message: str, *, newline: bool = True) -> None:
-    """Сообщение в GUI/консоль и в merge_build.log (если задан log_file)."""
+    """Сообщение в консоль и в merge_build.log."""
     text = message if message.endswith("\n") or not newline else message + "\n"
     if ctx.log is not None:
         ctx.log(text)
@@ -19,7 +19,6 @@ def emit(ctx: BuildContext, message: str, *, newline: bool = True) -> None:
             print(message, end=end, flush=True)
         except Exception:
             pass
-    # GUI пишет merge_build.log через log(); без дубля
     if ctx.log_file is not None and ctx.log is None:
         append_log_file(ctx.log_file, text)
 

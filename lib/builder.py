@@ -39,6 +39,12 @@ def excel_read_engine(preferred: str | None) -> str:
         return "openpyxl"
 
 
+def resolve_output_path(ctx: BuildContext) -> Path:
+    """Имя отчёта: output_file из config, плейсхолдер {sorg} → 3801–3806."""
+    template = str(ctx.config.get("output_file", "merge_columns_{sorg}.xlsx"))
+    return ctx.base_dir / template.format(sorg=ctx.sorg)
+
+
 class ReportBuilder:
     """Оркестрация сборки merge_columns.xlsx."""
 
@@ -83,7 +89,7 @@ class ReportBuilder:
         if not sources:
             raise ValueError("В config.yaml не задан ни один источник (sources).")
 
-        out_path = ctx.base_dir / cfg.get("output_file", "merge_columns.xlsx")
+        out_path = resolve_output_path(ctx)
         reader = ExcelSourceReader(ctx)
         merger = DataMerger(ctx)
         keys = MergeKeysParser()
@@ -289,7 +295,7 @@ class ReportBuilder:
         except PermissionError as e:
             raise PermissionError(
                 f"Не удалось записать {out_path}: файл открыт в Excel или заблокирован. "
-                f"Закройте merge_columns.xlsx и запустите скрипт снова."
+                f"Закройте файл и запустите скрипт снова."
             ) from e
 
     @staticmethod

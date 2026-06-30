@@ -16,7 +16,6 @@ class CheckEngine:
             "ch6_customer_vs_zw_ch6": self._ch6_customer_vs_compare,
             "ch6_customer_vs_tn_ch6": self._ch6_customer_vs_compare,
             "ch6_customer_vs_key_ch6": self._ch6_customer_vs_compare,
-            "key_at_work_reverse": self._key_at_work_reverse,
         }
 
     def apply(self, df: pd.DataFrame, specs: list[dict[str, Any]] | None) -> pd.DataFrame:
@@ -120,41 +119,4 @@ class CheckEngine:
                 if TextNorm.customer_node_in_list(ch6_val, compare_val, separator=sep)
                 else fail_label
             )
-        return result
-
-    def _key_at_work_reverse(
-        self, df: pd.DataFrame, spec: dict[str, Any]
-    ) -> pd.Series:
-        grp4_col = str(spec.get("grp4_column", "Grp4"))
-        aw_vals = {
-            TextNorm.key_value(v).upper()
-            for v in (spec.get("at_work_grp4_values") or ["AWM"])
-        }
-        reason_col = str(spec.get("reason_column", "CH6_CGrp"))
-        reason_vals = {
-            TextNorm.key_value(v).upper()
-            for v in (spec.get("reason_values") or ["P"])
-        }
-        business_col = str(spec.get("business_column", "CGrp"))
-        business_vals = {
-            TextNorm.key_value(v).upper()
-            for v in (spec.get("business_types") or ["P", "Q"])
-        }
-        ok_label = str(spec.get("ok", "true"))
-        fail_label = str(spec.get("fail", "false"))
-
-        result = pd.Series(ok_label, index=df.index, dtype=object)
-        if reason_col not in df.columns:
-            return result
-
-        for idx in df.index:
-            grp4 = TextNorm.key_value(df.at[idx, grp4_col]).upper()
-            if grp4 in aw_vals:
-                continue
-            reason = TextNorm.key_value(df.at[idx, reason_col]).upper()
-            if not reason or reason not in reason_vals:
-                continue
-            business = TextNorm.key_value(df.at[idx, business_col]).upper()
-            if business not in business_vals:
-                result.at[idx] = fail_label
         return result
