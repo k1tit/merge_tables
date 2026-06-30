@@ -59,6 +59,14 @@ class TextNorm:
         return str(val).strip()
 
     @staticmethod
+    def trade_name_key(val: Any) -> str:
+        """Ключ Trade Name / Search Term 2: 3651.0 и 03651 → 3651."""
+        v = TextNorm.key_value(val)
+        if v.isdigit():
+            return str(int(v))
+        return v
+
+    @staticmethod
     def compact_key_part(val: Any) -> str:
         if val is None or (isinstance(val, float) and pd.isna(val)):
             return ""

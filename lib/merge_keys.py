@@ -69,7 +69,11 @@ class MergeKeysParser:
     def normalize_frame(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
         out = df.copy()
         for key in keys:
-            if key in out.columns:
+            if key not in out.columns:
+                continue
+            if TextNorm.name(key) in ("trade name", "search term 2"):
+                out[key] = out[key].map(TextNorm.trade_name_key)
+            else:
                 out[key] = out[key].map(TextNorm.key_value)
         return out
 

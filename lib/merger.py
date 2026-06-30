@@ -67,6 +67,10 @@ class DataMerger:
         else:
             part = self._enrich_part(part, spec)
 
+        part, filter_note = self._apply_reference_filter(part, spec)
+        if filter_note and self.ctx.verbose:
+            emit(self.ctx, filter_note)
+
         overlap = self.keys.overlap_count(
             self.keys.normalize_frame(result.copy(), left),
             self.keys.normalize_frame(part.copy(), right),
@@ -120,12 +124,53 @@ class DataMerger:
                     filled = TextNorm.filled_count(result[col])
                     emit(self.ctx, f"    {col}: заполнено {filled} из {len(result)}")
                     if filled == 0 and label == "merge":
-                        emit(
-                            self.ctx,
-                            f"    ВНИМАНИЕ: {col!r} пустая — "
-                            f"проверьте Customer/KUNNR в файле и в config merge_on",
-                        )
+                        if col in ("TN_CH6", "TN_CH6_Name"):
+                            emit(
+                                self.ctx,
+                                f"    ВНИМАНИЕ: {col!r} пустая — в справочнике CH6_CGrp "
+                                f"нет SO Trade Name={self.ctx.sorg!r} или не совпадает Trade Name",
+                            )
+                        else:
+                            emit(
+                                self.ctx,
+                                f"    ВНИМАНИЕ: {col!r} пустая — "
+                                f"проверьте Customer/KUNNR в файле и в config merge_on",
+                            )
         return result
+
+    def _apply_reference_filter(
+        self, part: pd.DataFrame, spec: dict[str, Any]
+    ) -> tuple[pd.DataFrame, str | None]:
+        filt = spec.get("reference_filter")
+        if not filt:
+            return part, None
+
+        filtered = part
+        for col, raw_val in filt.items():
+            col_name = str(col).strip()
+            if col_name not in filtered.columns:
+                continue
+            val = str(raw_val).replace("{sorg}", self.ctx.sorg)
+            series = filtered[col_name].map(TextNorm.key_value)
+            filtered = filtered.loc[series == TextNorm.key_value(val)]
+
+        if not filtered.empty:
+            return filtered, (
+                f"  фильтр справочника {spec.get('file')!r}: "
+                f"SO Trade Name={self.ctx.sorg!r}, строк {len(filtered)}"
+            )
+
+        fallback = str(spec.get("reference_filter_fallback", "")).strip()
+        if fallback == "trade_name_only":
+            return part, (
+                f"  ВНИМАНИЕ: в справочнике {spec.get('file')!r} нет SO Trade Name="
+                f"{self.ctx.sorg!r} — join TN только по Trade Name"
+            )
+
+        return filtered, (
+            f"  ВНИМАНИЕ: в справочнике {spec.get('file')!r} нет строк для "
+            f"SO Trade Name={self.ctx.sorg!r}"
+        )
 
     def _enrich_part(
         self, part: pd.DataFrame, spec: dict[str, Any]

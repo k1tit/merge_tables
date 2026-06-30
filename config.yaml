@@ -186,8 +186,11 @@ sources:
   - file: "Справочник_CH6_CGrp.xlsx"
     sheet: 0
     merge_on:
-      left: ["SOrg.", "Trade Name"]
-      right: ["SO Trade Name", "Trade Name"]
+      left: ["Trade Name"]
+      right: ["Trade Name"]
+    reference_filter:
+      SO Trade Name: "{sorg}"
+    reference_filter_fallback: trade_name_only
     aggregate:
       TN_CH6:
         source: "6th level"
