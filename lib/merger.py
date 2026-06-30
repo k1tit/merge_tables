@@ -78,6 +78,8 @@ class DataMerger:
         if overwrite is not None and not isinstance(overwrite, list):
             overwrite = [overwrite]
 
+        expected = ColumnSpecParser.output_names(spec)
+
         result = self._merge_one(
             result,
             part,
@@ -86,9 +88,9 @@ class DataMerger:
             dedupe=dedupe,
             aggregate=aggregate,
             overwrite_columns=overwrite,
+            preserve_columns=expected,
         )
 
-        expected = ColumnSpecParser.output_names(spec)
         added = [c for c in expected if c not in before]
         missing = [c for c in expected if c not in result.columns]
         if missing:
@@ -183,6 +185,7 @@ class DataMerger:
         dedupe: bool,
         aggregate: dict[str, Any] | None,
         overwrite_columns: list[str] | None = None,
+        preserve_columns: list[str] | None = None,
     ) -> pd.DataFrame:
         for key in left:
             if key not in result.columns:
@@ -226,7 +229,8 @@ class DataMerger:
                 merged = merged.drop(columns=[was], errors="ignore")
             else:
                 merged = merged.rename(columns={was: col})
-        drop_after = [c for c in right if c not in left]
+        keep = set(preserve_columns or [])
+        drop_after = [c for c in right if c not in left and c not in keep]
         return merged.drop(columns=drop_after, errors="ignore")
 
     @staticmethod
