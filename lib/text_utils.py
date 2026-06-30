@@ -16,7 +16,7 @@ class TextNorm:
 
     @staticmethod
     def excel_text(val: Any) -> str:
-        """Строка для Excel-колонок с форматом «текст» (ИНН и т.п.)."""
+        """Строка для Excel-колонок с форматом «текст» (ИНН, SDst и т.п.)."""
         if val is None or (isinstance(val, float) and pd.isna(val)):
             return ""
         if isinstance(val, bool):

@@ -59,7 +59,14 @@ class ExcelSourceReader:
             if c in rename_for_usecols
         ]
 
-        df = self._read_subset(path, sheet, usecols)
+        text_cols = set(self.ctx.config.get("text_columns") or [])
+        dtype = {
+            rename_for_usecols[p["excel"]]: str
+            for p in plain_specs
+            if p["name"] in text_cols and p["excel"] in rename_for_usecols
+        }
+
+        df = self._read_subset(path, sheet, usecols, dtype=dtype or None)
         for col in list(df.columns):
             if TextNorm.is_id_column(col):
                 df[col] = df[col].map(TextNorm.key_value)
@@ -72,6 +79,10 @@ class ExcelSourceReader:
             rename_map[actual] = p["name"]
         if rename_map:
             df = df.rename(columns=rename_map)
+
+        for col in text_cols:
+            if col in df.columns:
+                df[col] = df[col].map(TextNorm.excel_text)
 
         for p in plain_specs:
             if p["name"] in df.columns:
@@ -119,6 +130,8 @@ class ExcelSourceReader:
         path: Path,
         sheet: Any,
         usecols: list[str] | None,
+        *,
+        dtype: dict[str, type] | None = None,
     ) -> pd.DataFrame:
         kwargs: dict[str, Any] = {
             "sheet_name": sheet,
@@ -126,4 +139,6 @@ class ExcelSourceReader:
         }
         if usecols:
             kwargs["usecols"] = usecols
+        if dtype:
+            kwargs["dtype"] = dtype
         return pd.read_excel(path, **kwargs)
