@@ -109,6 +109,12 @@ class DataMerger:
                 msg += " (колонка создана, но merge не добавил — проверьте ключи)"
             msg += f", ключ совпал у {overlap} строк"
             emit(self.ctx, msg)
+            if overlap == 0 and label == "post-merge" and "Customer Key" in left:
+                emit(
+                    self.ctx,
+                    "    Подсказка: Customer Key должен совпадать с колонкой «Ключ» "
+                    "в справочнике (суффикс 380N, не код SOrg)",
+                )
             for col in added:
                 if col in result.columns:
                     filled = TextNorm.filled_count(result[col])

@@ -143,21 +143,9 @@ class SorgSelector:
         file_prefix = self.detect_file_prefix(data_path) or folder
         if self.template != file_prefix:
             self._rewrite_files(out, self.template, file_prefix)
-        self._rewrite_customer_key_suffix(out, file_prefix)
         out["source_dir"] = folder
         out["sorg"] = file_prefix
         return out, file_prefix
-
-    @staticmethod
-    def _rewrite_customer_key_suffix(node: Any, sorg: str) -> None:
-        if isinstance(node, dict):
-            if node.get("type") == "customer_key" and str(node.get("suffix", "")) == "380N":
-                node["suffix"] = sorg
-            for val in node.values():
-                SorgSelector._rewrite_customer_key_suffix(val, sorg)
-        elif isinstance(node, list):
-            for item in node:
-                SorgSelector._rewrite_customer_key_suffix(item, sorg)
 
     @staticmethod
     def _rewrite_files(node: Any, template: str, sorg: str) -> None:
