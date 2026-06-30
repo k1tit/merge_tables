@@ -157,7 +157,8 @@ sources:
       - "Grp4"
       - "OrBlk"
       - name: "OrBlk2"
-        optional: true
+        source: "OrBlk2"
+        fallback: "OrBlk"
 
   - file: "3805 CH6"
     sheet: 0

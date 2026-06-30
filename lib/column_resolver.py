@@ -46,6 +46,7 @@ class ColumnSpecParser:
                         "name": name,
                         "excel": excel,
                         "optional": bool(item.get("optional", False)),
+                        "fallback": str(item.get("fallback", "")).strip() or None,
                     }
                 )
                 order.append(name)
@@ -173,6 +174,7 @@ class ColumnResolver:
                     break
                 if col_norm == "orblk2" and (
                     ex_norm == "orblk2"
+                    or ex_norm == "orblk.1"
                     or ("orblk" in ex_norm and "2" in ex_norm)
                 ):
                     found = excel_name

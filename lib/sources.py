@@ -74,7 +74,19 @@ class ExcelSourceReader:
             df = df.rename(columns=rename_map)
 
         for p in plain_specs:
-            if p["name"] not in df.columns and p.get("optional"):
+            if p["name"] in df.columns:
+                continue
+            fallback = p.get("fallback")
+            if fallback and fallback in df.columns:
+                df[p["name"]] = df[fallback]
+                if self.ctx.verbose:
+                    emit(
+                        self.ctx,
+                        f"  {rel!r}: колонка {p['name']!r} нет в файле — "
+                        f"взято из {fallback!r}",
+                    )
+                continue
+            if p.get("optional"):
                 df[p["name"]] = pd.NA
                 if self.ctx.verbose:
                     emit(
