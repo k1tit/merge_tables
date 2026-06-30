@@ -124,7 +124,7 @@ class DataMerger:
                     filled = TextNorm.filled_count(result[col])
                     emit(self.ctx, f"    {col}: заполнено {filled} из {len(result)}")
                     if filled == 0 and label == "merge":
-                        if col in ("TN_CH6", "TN_CH6_Name"):
+                        if col in ("TN_CH6", "TN_CH6_Name", "TN_CGrp"):
                             emit(
                                 self.ctx,
                                 f"    ВНИМАНИЕ: {col!r} пустая — в справочнике CH6_CGrp "

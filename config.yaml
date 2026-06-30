@@ -45,7 +45,9 @@ column_order:
   - "Check CH6 Customer & ZW"
   - "TN_CH6"
   - "TN_CH6_Name"
+  - "TN_CGrp"
   - "Check CH6 Customer & TN"
+  - "Check_TN_CGrp"
   - "Key"
   - "Key_CH6"
   - "Key_CH6_Name"
@@ -85,10 +87,12 @@ computed_columns:
 text_columns:
   - "Tax Number 1"
   - "A8"
+  - "PG"
   - "SDst"
-# A8: 01, 08, 030 — ведущие нули (мин. 2 знака; 030 не обрезается)
+# A8, PG: 01, 08 — ведущие нули (мин. 2 знака; 030 не обрезается)
 leading_zero_columns:
   A8: 2
+  PG: 2
 verbose: true
 
 checks:
@@ -116,6 +120,13 @@ checks:
     zw_ch6_column: "TN_CH6"
     apply_when:
       all_non_empty: ["CH6", "TN_CH6", "Trade Name"]
+    ok: "true"
+    fail: "false"
+
+  - name: "Check_TN_CGrp"
+    type: match_when_in_either
+    columns: ["CGrp", "TN_CGrp"]
+    values: ["S", "F", "K", "Q"]
     ok: "true"
     fail: "false"
 
@@ -204,12 +215,18 @@ sources:
         source: "6th level_name"
         separator: ", "
         unique: true
+      TN_CGrp:
+        source: "6th level_CGrp"
+        separator: ", "
+        unique: true
     merge_require_non_empty: ["Trade Name"]
     columns:
       - name: "TN_CH6"
         source: "6th level"
       - name: "TN_CH6_Name"
         source: "6th level_name"
+      - name: "TN_CGrp"
+        source: "6th level_CGrp"
 
   - file: "3805 ZW base"
     sheet: 0
