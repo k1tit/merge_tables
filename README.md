@@ -9,10 +9,29 @@ pip install -r requirements.txt
 python merge_columns.py
 ```
 
-Без меню: `python merge_columns.py -s 3805 --no-menu`
+### Одна папка SOrg
 
-**Все SOrg сразу:** `python merge_columns.py --all` → `merge_columns_ALL.xlsx`  
-В интерактивном меню: `a` или `все`.
+```powershell
+python merge_columns.py -s 3805 --no-menu
+```
+
+Результат: `merge_columns_3805.xlsx`
+
+### Все папки сразу (3801–3806)
+
+```powershell
+python merge_columns.py --all --no-menu
+```
+
+или:
+
+```powershell
+.\run_all.ps1
+```
+
+Результат: **`merge_columns_ALL.xlsx`** — данные из всех папок, где есть Excel.
+
+В интерактивном меню (`python merge_columns.py`): введите **`a`** или **`все`**.
 
 ## Данные
 
