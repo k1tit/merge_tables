@@ -86,6 +86,9 @@ text_columns:
   - "Tax Number 1"
   - "A8"
   - "SDst"
+# A8: 01, 08, 030 — ведущие нули (мин. 2 знака; 030 не обрезается)
+leading_zero_columns:
+  A8: 2
 verbose: true
 
 checks:

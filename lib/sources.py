@@ -60,6 +60,7 @@ class ExcelSourceReader:
         ]
 
         text_cols = set(self.ctx.config.get("text_columns") or [])
+        leading_zero = self.ctx.config.get("leading_zero_columns") or {}
         dtype = {
             rename_for_usecols[p["excel"]]: str
             for p in plain_specs
@@ -82,7 +83,11 @@ class ExcelSourceReader:
 
         for col in text_cols:
             if col in df.columns:
-                df[col] = df[col].map(TextNorm.excel_text)
+                df[col] = df[col].map(
+                    lambda v, c=col: TextNorm.format_text_column(
+                        v, c, leading_zero
+                    )
+                )
 
         for p in plain_specs:
             if p["name"] in df.columns:

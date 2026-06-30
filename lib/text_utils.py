@@ -31,6 +31,21 @@ class TextNorm:
         return text
 
     @staticmethod
+    def format_text_column(
+        val: Any,
+        column: str,
+        leading_zero: dict[str, int] | None = None,
+    ) -> str:
+        """Текст для Excel; для A8 и др. — ведущие нули (8 → 08, 030 без изменений)."""
+        text = TextNorm.excel_text(val)
+        if not text:
+            return ""
+        width = (leading_zero or {}).get(column)
+        if width and text.isdigit() and len(text) < width:
+            return text.zfill(width)
+        return text
+
+    @staticmethod
     def key_part(val: Any) -> str:
         """Фрагмент для Key: строки как есть (036), числа без .0."""
         if val is None or (isinstance(val, float) and pd.isna(val)):

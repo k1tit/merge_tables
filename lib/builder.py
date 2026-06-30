@@ -193,6 +193,7 @@ class ReportBuilder:
             out_path,
             ctx.write_engine,
             text_columns=text_columns,
+            leading_zero_columns=cfg.get("leading_zero_columns"),
             extra_sheets=extra_sheets or None,
         )
         if ctx.verbose:
@@ -334,12 +335,16 @@ class ReportBuilder:
         write_engine: str,
         *,
         text_columns: list[str] | None = None,
+        leading_zero_columns: dict[str, int] | None = None,
         extra_sheets: list[tuple[str, pd.DataFrame]] | None = None,
     ) -> None:
         text_cols = [c for c in (text_columns or []) if c in df.columns]
+        leading_zero = leading_zero_columns or {}
         out = df.copy()
         for col in text_cols:
-            out[col] = out[col].map(TextNorm.excel_text)
+            out[col] = out[col].map(
+                lambda v, c=col: TextNorm.format_text_column(v, c, leading_zero)
+            )
 
         suffix = out_path.suffix.lower()
         if suffix == ".csv":
@@ -363,7 +368,11 @@ class ReportBuilder:
                         if c in ref_out.columns
                     ]
                     for col in ref_text:
-                        ref_out[col] = ref_out[col].map(TextNorm.excel_text)
+                        ref_out[col] = ref_out[col].map(
+                            lambda v, c=col: TextNorm.format_text_column(
+                                v, c, leading_zero
+                            )
+                        )
                     ref_out.to_excel(writer, index=False, sheet_name=sheet_name[:31])
                     ReportBuilder._apply_text_columns(
                         writer, engine, sheet_name[:31], ref_out, ref_text
