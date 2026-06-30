@@ -1,5 +1,6 @@
 output_file: merge_columns_{sorg}.xlsx
 sorg: "3805"
+reference_dir: "references"
 # Справочник поводов потребления (A8) для At Work — 4-й элемент Key при совпадении
 at_work_a8_reference:
   file: "Справочник At Work&Education.xlsx"

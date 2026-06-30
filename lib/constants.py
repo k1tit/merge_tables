@@ -28,4 +28,5 @@ FILE_ALIASES = {
     "Справочник_CH6_CGrp": "Справочник_CH6_CGrp.xlsx",
     "Справочник Ключ-Иерархия": "Справочник Ключ-Иерархия.xlsx",
     "Справочник At Work&Education": "Справочник At Work&Education.xlsx",
+    "trade": "trade.xlsx",
 }

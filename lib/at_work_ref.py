@@ -26,8 +26,7 @@ def load_at_work_reference_df(base_dir: Path, cfg: dict[str, Any]) -> pd.DataFra
 
     rel_file = ref.get("file")
     if rel_file:
-        source_dir = cfg.get("source_dir")
-        resolver = PathResolver(base_dir, str(source_dir).strip() if source_dir else None)
+        resolver = PathResolver.from_config(base_dir, cfg)
         path = resolver.resolve(str(rel_file))
         if path.exists():
             sheet = ref.get("sheet", "At Work")
@@ -61,8 +60,7 @@ def load_at_work_a8_values(base_dir: Path, cfg: dict[str, Any]) -> frozenset[str
 
     rel_file = ref.get("file")
     if rel_file:
-        source_dir = cfg.get("source_dir")
-        resolver = PathResolver(base_dir, str(source_dir).strip() if source_dir else None)
+        resolver = PathResolver.from_config(base_dir, cfg)
         path = resolver.resolve(str(rel_file))
         if path.exists():
             sheet = ref.get("sheet", 0)
@@ -87,9 +85,10 @@ def ensure_at_work_reference_file(base_dir: Path, cfg: dict[str, Any]) -> Path |
     raw_values = ref.get("values")
     if not rel_file or not raw_values:
         return None
-    path = base_dir / str(rel_file)
+    path = PathResolver.from_config(base_dir, cfg).resolve(str(rel_file))
     if path.exists():
         return path
+    path.parent.mkdir(parents=True, exist_ok=True)
     sheet = str(ref.get("sheet", "At Work"))
     column = str(ref.get("column", "A8"))
     df = pd.DataFrame({column: [TextNorm.excel_text(v) for v in raw_values]})

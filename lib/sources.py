@@ -18,7 +18,7 @@ class ExcelSourceReader:
 
     def __init__(self, ctx: BuildContext) -> None:
         self.ctx = ctx
-        self.paths = PathResolver(ctx.base_dir, ctx.source_dir)
+        self.paths = PathResolver.from_config(ctx.base_dir, ctx.config)
 
     def read(
         self,
@@ -30,8 +30,8 @@ class ExcelSourceReader:
         rel = spec["file"]
         path = self.paths.resolve(rel)
         if not path.exists():
-            hint = f" (папка: {self.paths.data_root})" if self.ctx.source_dir else ""
-            raise FileNotFoundError(f"Файл не найден: {path}{hint}")
+            hint = self.paths.lookup_hint(rel)
+            raise FileNotFoundError(f"Файл не найден: {path} ({hint})")
 
         sheet = spec.get("sheet", 0)
         plain_specs, inline_computed, column_order = ColumnSpecParser.parse(

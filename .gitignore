@@ -4,7 +4,8 @@ dist/
 build/
 MergeColumns_ready/
 *.xlsx
-!Справочник At Work&Education.xlsx
+!references/*.xlsx
+!references/*.XLSX
 merge_build.log
 3805/
 3801/
