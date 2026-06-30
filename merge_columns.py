@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Сборка merge_columns.xlsx из config.yaml."""
+"""
+Сборка merge_columns из config.yaml.
+
+  python merge_columns.py              меню (одна папка или a = все)
+  python merge_columns.py -s 3805      одна папка SOrg
+  python merge_columns.py --all        все папки 3801-3806 -> merge_columns_ALL.xlsx
+"""
 
 from __future__ import annotations
 

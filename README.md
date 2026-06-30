@@ -20,18 +20,12 @@ python merge_columns.py -s 3805 --no-menu
 ### Все папки сразу (3801–3806)
 
 ```powershell
-python merge_columns.py --all --no-menu
-```
-
-или:
-
-```powershell
-.\run_all.ps1
+python merge_columns.py --all
 ```
 
 Результат: **`merge_columns_ALL.xlsx`** — данные из всех папок, где есть Excel.
 
-В интерактивном меню (`python merge_columns.py`): введите **`a`** или **`все`**.
+В интерактивном меню (`python merge_columns.py`): введите **`a`**.
 
 ## Данные
 
