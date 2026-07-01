@@ -303,28 +303,16 @@ sources:
     merge_on:
       left: ["Customer"]
       right: ["Customer"]
+    dedupe: false
     overwrite_columns: ["CGrp"]
-    aggregate:
-      CGrp:
-        source: "CGrp"
-        separator: ", "
-        unique: true
-      ZW_SO:
-        source: "SOrg."
-        separator: ", "
-        unique: true
-      ZW_A7:
-        source: "A7"
-        separator: ", "
-        unique: true
-      ZW_CGrp:
-        source: "CGrp"
-        separator: ", "
-        unique: true
     columns:
       - "CGrp"
-      - "A7"
-      - "SOrg."
+      - name: "ZW_SO"
+        source: "SOrg."
+      - name: "ZW_A7"
+        source: "A7"
+      - name: "ZW_CGrp"
+        from: ["CGrp"]
 
   - file: "3805 ZW"
     sheet: 0
