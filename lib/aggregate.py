@@ -37,7 +37,7 @@ class DataAggregator:
                 vals: list[str] = []
                 seen: set[str] = set()
                 for raw in series:
-                    v = TextNorm.key_value(raw)
+                    v = TextNorm.key_part(raw)
                     if not v:
                         continue
                     if _unique:

@@ -93,11 +93,15 @@ computed_columns:
 
 text_columns:
   - "Tax Number 1"
+  - "A7"
+  - "ZW_A7"
   - "A8"
   - "PG"
   - "SDst"
 
 leading_zero_columns:
+  A7: 2
+  ZW_A7: 2
   A8: 2
   PG: 2
 
@@ -309,6 +313,10 @@ sources:
         source: "A7"
         separator: ", "
         unique: true
+      ZW_CGrp:
+        source: "CGrp"
+        separator: ", "
+        unique: true
     columns:
       - "CGrp"
       - "A7"
@@ -329,13 +337,6 @@ sources:
             source: "HgLvCust."
           - name: "ZW_CH6_Name"
             source: "Text:Customer number of the higher-level"
-      - file: "3805 ZW base"
-        merge_on:
-          left: ["ZW_SO", "ZW"]
-          right: ["SOrg.", "Customer"]
-        dedupe: true
-        columns:
-          - "CGrp"
     aggregate:
       ZW:
         source: "ZW"
@@ -345,10 +346,6 @@ sources:
         separator: ", "
         unique: true
       ZW_CH6_Name:
-        separator: ", "
-        unique: true
-      ZW_CGrp:
-        source: "CGrp"
         separator: ", "
         unique: true
     columns:
