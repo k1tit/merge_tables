@@ -19,7 +19,7 @@ from .at_work_ref import (
 )
 from .checks import CheckEngine
 from .computed import ComputedColumnsApplier
-from .constants import REQUIRED_CH6_COLUMNS, SCRIPT_VERSION
+from .constants import EXCEL_MAX_ROWS, REQUIRED_CH6_COLUMNS, SCRIPT_VERSION
 from .context import BuildContext
 from .log_sink import emit, open_build_log
 from .text_utils import TextNorm
@@ -171,6 +171,8 @@ class ReportBuilder:
         result: pd.DataFrame,
         out_path: Path,
         t0: float,
+        *,
+        data_sheets: list[tuple[str, pd.DataFrame]] | None = None,
     ) -> Path:
         cfg = ctx.config
         checks = cfg.get("checks")
@@ -199,6 +201,7 @@ class ReportBuilder:
             autofit_sample_rows=int(cfg.get("excel_autofit_sample_rows", 1000)),
             autofit_max_width=int(cfg.get("excel_autofit_max_width", 55)),
             extra_sheets=extra_sheets or None,
+            data_sheets=data_sheets,
         )
         if ctx.verbose:
             emit(ctx, f"  запись: {time.perf_counter() - t2:.1f} с")
@@ -244,7 +247,7 @@ class ReportBuilder:
         emit(ctx, f"  папки: {', '.join(folders)}")
         emit(ctx, f"  output: {out_path.resolve()}")
 
-        parts: list[pd.DataFrame] = []
+        sorg_frames: list[tuple[str, pd.DataFrame]] = []
         for i, (cfg, folder) in enumerate(runs, 1):
             emit(ctx, f"\n--- SOrg {folder} [{i}/{len(runs)}] ---")
             sub_ctx = BuildContext(
@@ -259,11 +262,19 @@ class ReportBuilder:
                 log=log,
                 log_file=ctx.log_file,
             )
-            parts.append(self._build_dataframe(sub_ctx))
+            sorg_frames.append((folder, self._build_dataframe(sub_ctx)))
 
-        result = pd.concat(parts, ignore_index=True)
-        emit(ctx, f"\n  итого строк: {len(result)}")
-        return self._write_result(ctx, result, out_path, t0)
+        total_rows = sum(len(df) for _, df in sorg_frames)
+        emit(ctx, f"\n  итого строк: {total_rows}")
+        emit(
+            ctx,
+            f"  запись Excel: {len(sorg_frames)} листов (по SOrg), "
+            f"лимит {EXCEL_MAX_ROWS} строк на лист",
+        )
+        result = pd.concat([df for _, df in sorg_frames], ignore_index=True)
+        return self._write_result(
+            ctx, result, out_path, t0, data_sheets=sorg_frames
+        )
 
     def _print_header(
         self,
@@ -467,6 +478,56 @@ class ReportBuilder:
             ws.set_column(col_idx, col_idx, width, col_fmt)
 
     @staticmethod
+    def _prepare_out_frame(
+        df: pd.DataFrame,
+        text_cols: list[str],
+        leading_zero: dict[str, int],
+    ) -> pd.DataFrame:
+        out = df.copy()
+        for col in text_cols:
+            out[col] = out[col].map(
+                lambda v, c=col: TextNorm.format_text_column(v, c, leading_zero)
+            )
+        return out
+
+    @staticmethod
+    def _apply_sheet_layout(
+        writer: pd.ExcelWriter,
+        engine: str,
+        sheet: str,
+        out: pd.DataFrame,
+        *,
+        widths: dict[str, float],
+        color_map: dict[str, str],
+        text_cols: list[str],
+    ) -> None:
+        if engine == "xlsxwriter":
+            ReportBuilder._apply_xlsxwriter_layout(
+                writer,
+                sheet,
+                out,
+                widths=widths,
+                color_map=color_map,
+                text_cols=text_cols,
+            )
+        else:
+            ReportBuilder._apply_text_columns(
+                writer, engine, sheet, out, text_cols
+            )
+            ReportBuilder._apply_column_colors(
+                writer,
+                engine,
+                sheet,
+                out,
+                color_map,
+                text_cols=text_cols,
+            )
+            if widths:
+                ReportBuilder._apply_column_widths_openpyxl(
+                    writer, sheet, out, widths
+                )
+
+    @staticmethod
     def _write(
         df: pd.DataFrame,
         out_path: Path,
@@ -479,60 +540,63 @@ class ReportBuilder:
         autofit_sample_rows: int = 1000,
         autofit_max_width: int = 55,
         extra_sheets: list[tuple[str, pd.DataFrame]] | None = None,
+        data_sheets: list[tuple[str, pd.DataFrame]] | None = None,
     ) -> None:
-        text_cols = [c for c in (text_columns or []) if c in df.columns]
         leading_zero = leading_zero_columns or {}
-        color_map = ReportBuilder._column_color_map(column_colors, df)
-        out = df.copy()
-        for col in text_cols:
-            out[col] = out[col].map(
-                lambda v, c=col: TextNorm.format_text_column(v, c, leading_zero)
-            )
+        if data_sheets:
+            main_sheets = [(str(name)[:31], frame) for name, frame in data_sheets]
+        else:
+            main_sheets = [("Sheet1", df)]
+
+        for sheet_name, frame in main_sheets:
+            n_rows = len(frame)
+            if n_rows > EXCEL_MAX_ROWS:
+                raise ValueError(
+                    f"Лист {sheet_name!r}: {n_rows} строк — больше лимита Excel "
+                    f"({EXCEL_MAX_ROWS}). Соберите один SOrg: python merge_columns.py -s {sheet_name}"
+                )
 
         suffix = out_path.suffix.lower()
         if suffix == ".csv":
+            if len(main_sheets) != 1:
+                raise ValueError(
+                    "CSV не поддерживает несколько листов. Укажите output_file: *.xlsx"
+                )
+            text_cols = [c for c in (text_columns or []) if c in main_sheets[0][1].columns]
+            out = ReportBuilder._prepare_out_frame(
+                main_sheets[0][1], text_cols, leading_zero
+            )
             out.to_csv(out_path, index=False, encoding="utf-8-sig")
             return
 
         engine = "xlsxwriter" if write_engine == "xlsxwriter" else "openpyxl"
-        widths = (
-            ReportBuilder._estimate_column_widths(
-                out,
-                sample_rows=autofit_sample_rows,
-                max_width=autofit_max_width,
-            )
-            if autofit_columns
-            else {}
-        )
         try:
             with pd.ExcelWriter(out_path, engine=engine) as writer:
-                main_sheet = "Sheet1"
-                out.to_excel(writer, index=False, sheet_name=main_sheet)
-                if engine == "xlsxwriter":
-                    ReportBuilder._apply_xlsxwriter_layout(
+                for sheet_name, frame in main_sheets:
+                    text_cols = [c for c in (text_columns or []) if c in frame.columns]
+                    color_map = ReportBuilder._column_color_map(column_colors, frame)
+                    out = ReportBuilder._prepare_out_frame(
+                        frame, text_cols, leading_zero
+                    )
+                    widths = (
+                        ReportBuilder._estimate_column_widths(
+                            out,
+                            sample_rows=autofit_sample_rows,
+                            max_width=autofit_max_width,
+                        )
+                        if autofit_columns
+                        else {}
+                    )
+                    out.to_excel(writer, index=False, sheet_name=sheet_name)
+                    ReportBuilder._apply_sheet_layout(
                         writer,
-                        main_sheet,
+                        engine,
+                        sheet_name,
                         out,
                         widths=widths,
                         color_map=color_map,
                         text_cols=text_cols,
                     )
-                else:
-                    ReportBuilder._apply_text_columns(
-                        writer, engine, main_sheet, out, text_cols
-                    )
-                    ReportBuilder._apply_column_colors(
-                        writer,
-                        engine,
-                        main_sheet,
-                        out,
-                        color_map,
-                        text_cols=text_cols,
-                    )
-                    if widths:
-                        ReportBuilder._apply_column_widths_openpyxl(
-                            writer, main_sheet, out, widths
-                        )
 
                 for sheet_name, ref_raw in extra_sheets or []:
                     ref_out = ref_raw.copy()
@@ -551,11 +615,19 @@ class ReportBuilder:
                     ReportBuilder._apply_text_columns(
                         writer, engine, sheet_name[:31], ref_out, ref_text
                     )
-        except PermissionError as e:
-            raise PermissionError(
-                f"Не удалось записать {out_path}: файл открыт в Excel или заблокирован. "
-                f"Закройте файл и запустите скрипт снова."
-            ) from e
+        except (PermissionError, ValueError) as e:
+            if isinstance(e, PermissionError):
+                raise PermissionError(
+                    f"Не удалось записать {out_path}: файл открыт в Excel или заблокирован. "
+                    f"Закройте файл и запустите скрипт снова."
+                ) from e
+            if "too large" in str(e).lower() or "sheet size" in str(e).lower():
+                raise ValueError(
+                    f"Слишком много строк для одного листа Excel (лимит {EXCEL_MAX_ROWS}). "
+                    f"Используйте режим «все папки» (a / --all) — по листу на SOrg, "
+                    f"или соберите один SOrg: python merge_columns.py -s 3805"
+                ) from e
+            raise
 
     @staticmethod
     def _apply_text_columns(

@@ -23,7 +23,9 @@ python merge_columns.py -s 3805 --no-menu
 python merge_columns.py --all
 ```
 
-Результат: **`merge_columns_ALL.xlsx`** — данные из всех папок, где есть Excel.
+Результат: **`merge_columns_ALL.xlsx`** — лист на каждый SOrg (3801…3806) + справочник At Work.
+
+> Excel — не больше 1 048 576 строк на лист. Все SOrg вместе (~2,3 млн строк) пишутся **отдельными листами**, не одной таблицей.
 
 В интерактивном меню (`python merge_columns.py`): пункт **`a`** — расширенная проверка всех папок.
 
