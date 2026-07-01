@@ -1,7 +1,7 @@
 output_file: merge_columns_{sorg}.xlsx
 sorg: "3805"
 reference_dir: "references"
-# Справочник поводов потребления (A8) для At Work — 4-й элемент Key при совпадении
+
 at_work_a8_reference:
   file: "Справочник At Work&Education.xlsx"
   sheet: "At Work"
@@ -75,6 +75,13 @@ computed_columns:
       column: "Grp4"
       values: ["DI"]
       parts: ["ZW_A7"]
+    # Grp4=DI и A8 из справочника At Work/Education → A7 & A8 & … (без ZW_A7)
+    include_parts_when:
+      - column: "Grp4"
+        values: ["DI"]
+        parts: ["A8"]
+        insert_after: "A7"
+        require_a8_in_reference: true
     invalid_key: ""
     at_work_education:
       reason_column: "CH6_CGrp"
@@ -89,12 +96,11 @@ text_columns:
   - "A8"
   - "PG"
   - "SDst"
-# A8, PG: 01, 08 — ведущие нули (мин. 2 знака; 030 не обрезается)
+
 leading_zero_columns:
   A8: 2
   PG: 2
 
-# Фон всего столбца (шапка + данные) в итоговом Excel
 column_colors:
   D7EACF:
     - "SOrg."
@@ -139,7 +145,6 @@ column_colors:
     - "Key_CH6"
     - "Key_CH6_Name"
 
-# Автоподбор ширины столбцов в Excel (по шапке + выборке строк)
 excel_autofit_columns: true
 excel_autofit_sample_rows: 1000
 excel_autofit_max_width: 55
@@ -191,6 +196,7 @@ checks:
     fail: "false"
 
 post_sources:
+  # Key_CH6: Customer Key → Ключ → колонка Иерархия (узел)
   - file: "Справочник Ключ-Иерархия"
     sheet: 0
     merge_on:
@@ -200,6 +206,15 @@ post_sources:
     columns:
       - name: "Key_CH6"
         source: "Иерархия"
+
+  # Key_CH6_Name: Key_CH6 → Иерархия (узел в справочнике) → Название узла
+  - file: "Справочник Ключ-Иерархия"
+    sheet: 0
+    merge_on:
+      left: ["Key_CH6"]
+      right: ["Иерархия"]
+    dedupe: true
+    columns:
       - name: "Key_CH6_Name"
         source: "Название узла"
 

@@ -175,6 +175,41 @@ class ComputedColumnsApplier:
         return result
 
     @classmethod
+    def _include_parts_for_row(
+        cls,
+        row: pd.Series,
+        parts: list[str],
+        spec: dict[str, Any],
+        *,
+        a8_ref_values: frozenset[str] | None = None,
+    ) -> list[str]:
+        rules = spec.get("include_parts_when") or []
+        if isinstance(rules, dict):
+            rules = [rules]
+        result = list(parts)
+        for rule in rules:
+            col = str(rule.get("column", "Grp4"))
+            vals = cls._norm_upper_set(rule.get("values"), [])
+            to_add = [str(p) for p in (rule.get("parts") or []) if str(p).strip()]
+            after = str(rule.get("insert_after", "")).strip()
+            require_ref = bool(rule.get("require_a8_in_reference", False))
+            if col not in row.index or not vals or not to_add:
+                continue
+            if TextNorm.key_value(row[col]).upper() not in vals:
+                continue
+            for part in to_add:
+                if part in result:
+                    continue
+                if require_ref and part == cls._a8_column(spec):
+                    if not cls._a8_in_reference(row, spec, a8_ref_values):
+                        continue
+                if after and after in result:
+                    result.insert(result.index(after) + 1, part)
+                else:
+                    result.append(part)
+        return result
+
+    @classmethod
     def _invalid_key_value(cls, spec: dict[str, Any]) -> str:
         return str(spec.get("invalid_key", ""))
 
@@ -227,6 +262,9 @@ class ComputedColumnsApplier:
                 continue
             parts = at_work if mode == "at_work" else standard
             parts = cls._omit_parts_for_row(row, parts, spec)
+            parts = cls._include_parts_for_row(
+                row, parts, spec, a8_ref_values=a8_ref_values
+            )
             result.append(cls._glue_parts(row, parts, sep, skip_empty=skip_empty))
         return pd.Series(result, index=df.index, dtype=object)
 
