@@ -309,6 +309,10 @@ sources:
         source: "CGrp"
         separator: ", "
         unique: true
+      ZW_SO:
+        source: "SOrg."
+        separator: ", "
+        unique: true
       ZW_A7:
         source: "A7"
         separator: ", "
@@ -320,37 +324,38 @@ sources:
     columns:
       - "CGrp"
       - "A7"
+      - "SOrg."
 
   - file: "3805 ZW"
     sheet: 0
     merge_on:
-      left: ["SOrg.", "Customer"]
-      right: ["ZW_SO", "KUNNR"]
-    enrich_from:
-      - file: "3805 ZW CH6"
-        merge_on:
-          left: ["ZW_SO", "ZW"]
-          right: ["SOrg.", "Customer"]
-        dedupe: true
-        columns:
-          - name: "ZW_CH6"
-            source: "HgLvCust."
-          - name: "ZW_CH6_Name"
-            source: "Text:Customer number of the higher-level"
+      left: ["Customer"]
+      right: ["KUNNR"]
     aggregate:
       ZW:
         source: "ZW"
         separator: ", "
         unique: true
-      ZW_CH6:
-        separator: ", "
-        unique: true
-      ZW_CH6_Name:
-        separator: ", "
-        unique: true
     columns:
       - name: "ZW"
         source: "KTONR"
-      - name: "ZW_SO"
-        source: "VKORG"
-      - "KUNNR"
+
+  - file: "3805 ZW CH6"
+    sheet: 0
+    merge_on:
+      left: ["Customer"]
+      right: ["Customer"]
+    aggregate:
+      ZW_CH6:
+        source: "ZW_CH6"
+        separator: ", "
+        unique: true
+      ZW_CH6_Name:
+        source: "ZW_CH6_Name"
+        separator: ", "
+        unique: true
+    columns:
+      - name: "ZW_CH6"
+        source: "HgLvCust."
+      - name: "ZW_CH6_Name"
+        source: "Text:Customer number of the higher-level"

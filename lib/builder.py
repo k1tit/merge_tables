@@ -148,10 +148,10 @@ class ReportBuilder:
         if ctx.verbose:
             n_src = len(sources)
             emit(ctx, f"  merge_columns {SCRIPT_VERSION}, источников: {n_src}")
-            if any(s.get("enrich_from") for s in sources):
+            if any(str(s.get("file", "")) == ctx.zw_ch6_file for s in sources):
                 emit(
                     ctx,
-                    f"  enrich_from ({ctx.zw_ch6_file}: ZW_CH6, ZW_CH6_Name)",
+                    f"  {ctx.zw_ch6_file}: ZW_CH6, ZW_CH6_Name по Customer",
                 )
 
         result = self._build_dataframe(ctx)
@@ -282,7 +282,7 @@ class ReportBuilder:
         out_path: Path,
         sources: list[dict[str, Any]],
     ) -> None:
-        has_enrich = any(s.get("enrich_from") for s in sources)
+        has_zw_ch6 = any(str(s.get("file", "")) == ctx.zw_ch6_file for s in sources)
         has_ch6 = any(
             "CH6" in str(s.get("file", "")) and s.get("file") != ctx.zw_file
             for s in sources
@@ -291,10 +291,10 @@ class ReportBuilder:
         emit(ctx, f"  config: {ctx.config_path}")
         emit(ctx, f"  Папка данных: {ctx.source_dir}, префикс файлов: {ctx.sorg}")
         emit(ctx, f"  output: {out_path.resolve()}")
-        if not has_enrich:
-            emit(ctx, f"  ОШИБКА КОНФИГА: нет enrich_from для {ctx.zw_ch6_file!r}")
+        if not has_zw_ch6:
+            emit(ctx, f"  ОШИБКА КОНФИГА: нет источника {ctx.zw_ch6_file!r}")
         elif ctx.verbose:
-            emit(ctx, f"  enrich_from: OK ({ctx.zw_ch6_file} -> {ctx.zw_file})")
+            emit(ctx, f"  {ctx.zw_ch6_file}: OK (merge по Customer)")
         if not has_ch6 and ctx.verbose:
             emit(ctx, f"  запасной источник {ctx.zw_ch6_file}: нет")
         if ctx.default_merge is not None and ctx.verbose:
