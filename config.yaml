@@ -290,8 +290,13 @@ sources:
         source: "CGrp"
         separator: ", "
         unique: true
+      ZW_A7:
+        source: "A7"
+        separator: ", "
+        unique: true
     columns:
       - "CGrp"
+      - "A7"
 
   - file: "3805 ZW"
     sheet: 0
@@ -315,7 +320,6 @@ sources:
           right: ["SOrg.", "Customer"]
         dedupe: true
         columns:
-          - "A7"
           - "CGrp"
     aggregate:
       ZW:
@@ -326,10 +330,6 @@ sources:
         separator: ", "
         unique: true
       ZW_CH6_Name:
-        separator: ", "
-        unique: true
-      ZW_A7:
-        source: "A7"
         separator: ", "
         unique: true
       ZW_CGrp:
