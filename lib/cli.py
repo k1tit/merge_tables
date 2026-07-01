@@ -59,7 +59,13 @@ class Application:
                 cfg_run = dict(cfg or {})
 
             if self.args.quiet:
-                cfg_run["verbose"] = False
+                if all_runs:
+                    all_runs = [
+                        ({**cfg, "verbose": False}, folder)
+                        for cfg, folder in all_runs
+                    ]
+                else:
+                    cfg_run["verbose"] = False
             elif self.args.all or selected == ALL_SORG_LABEL:
                 folders = [f for _, f in all_runs or []]
                 print(f"SOrg: все ({', '.join(folders)})")
@@ -69,7 +75,8 @@ class Application:
             log = None if self.args.quiet else make_console_log(log_file)
 
             if all_runs:
-                out = build_merge_all(config_path, all_runs, log=log)
+                paths = build_merge_all(config_path, all_runs, log=log)
+                return self._verify_outputs(paths, quiet=self.args.quiet)
             else:
                 out = build_merge(config_path, cfg=cfg_run, log=log)
 
@@ -77,6 +84,17 @@ class Application:
         except (FileNotFoundError, KeyError, ValueError, PermissionError) as e:
             print(f"Ошибка: {e}", file=sys.stderr)
             return 1
+
+    @staticmethod
+    def _verify_outputs(paths: list[Path], *, quiet: bool) -> int:
+        if not paths:
+            print("Нет выходных файлов.", file=sys.stderr)
+            return 1
+        for out in paths:
+            rc = Application._verify_output(out, quiet=quiet)
+            if rc != 0:
+                return rc
+        return 0
 
     @staticmethod
     def _verify_output(out: Path, *, quiet: bool) -> int:

@@ -4,7 +4,7 @@
 
   python merge_columns.py              меню (одна папка или a = все)
   python merge_columns.py -s 3805      одна папка SOrg
-  python merge_columns.py --all        все папки 3801-3806 -> merge_columns_ALL.xlsx
+  python merge_columns.py --all        все папки 3801-3806 -> merge_columns_3801.xlsx …
 """
 
 from __future__ import annotations

@@ -40,7 +40,7 @@ def excel_read_engine(preferred: str | None) -> str:
 
 
 def resolve_output_path(ctx: BuildContext) -> Path:
-    """Имя отчёта: output_file из config, плейсхолдер {sorg} → 3801–3806 или ALL."""
+    """Имя отчёта: output_file из config, плейсхолдер {sorg} → 3801–3806."""
     template = str(ctx.config.get("output_file", "merge_columns_{sorg}.xlsx"))
     sorg = str(ctx.config.get("sorg") or ctx.sorg).strip()
     return ctx.base_dir / template.format(sorg=sorg)
@@ -212,69 +212,29 @@ class ReportBuilder:
         self,
         runs: list[tuple[dict[str, Any], str]],
         log: Callable[[str], None] | None = None,
-    ) -> Path:
-        """Сборка одного отчёта из всех папок SOrg."""
+    ) -> list[Path]:
+        """Сборка отдельного merge_columns_{sorg}.xlsx для каждой папки SOrg."""
         if not runs:
             raise ValueError("Нет папок SOrg для сборки")
 
-        all_cfg = dict(runs[0][0])
-        all_cfg["sorg"] = "ALL"
-        all_cfg.pop("source_dir", None)
-
-        ctx = BuildContext(
-            base_dir=self.base_dir,
-            config_path=self.config_path,
-            config=all_cfg,
-            read_engine=excel_read_engine(all_cfg.get("excel_read_engine")),
-            write_engine=str(all_cfg.get("excel_write_engine", "openpyxl")),
-            lookup_dedupe=bool(all_cfg.get("lookup_dedupe", True)),
-            verbose=bool(all_cfg.get("verbose", True)),
-            default_merge=all_cfg.get("merge_on"),
-            log=log,
-        )
-        ctx.log_file = ctx.base_dir / "merge_build.log"
-        if not ctx.log:
-            ctx.log_file = open_build_log(ctx.base_dir)
-            emit(ctx, f"  журнал: {ctx.log_file}")
-        elif ctx.log:
-            ctx.log(f"  журнал: {ctx.log_file.resolve()}\n")
-
-        t0 = time.perf_counter()
         folders = [folder for _, folder in runs]
-        out_path = resolve_output_path(ctx)
-        emit(ctx, f"=== merge_columns {SCRIPT_VERSION} — все SOrg ===")
-        emit(ctx, f"  config: {ctx.config_path}")
-        emit(ctx, f"  папки: {', '.join(folders)}")
-        emit(ctx, f"  output: {out_path.resolve()}")
-
-        sorg_frames: list[tuple[str, pd.DataFrame]] = []
-        for i, (cfg, folder) in enumerate(runs, 1):
-            emit(ctx, f"\n--- SOrg {folder} [{i}/{len(runs)}] ---")
-            sub_ctx = BuildContext(
-                base_dir=self.base_dir,
-                config_path=self.config_path,
-                config=cfg,
-                read_engine=ctx.read_engine,
-                write_engine=ctx.write_engine,
-                lookup_dedupe=ctx.lookup_dedupe,
-                verbose=ctx.verbose,
-                default_merge=cfg.get("merge_on"),
-                log=log,
-                log_file=ctx.log_file,
+        if log:
+            log(
+                f"=== merge_columns {SCRIPT_VERSION} — все SOrg "
+                f"({', '.join(folders)}) ===\n"
             )
-            sorg_frames.append((folder, self._build_dataframe(sub_ctx)))
 
-        total_rows = sum(len(df) for _, df in sorg_frames)
-        emit(ctx, f"\n  итого строк: {total_rows}")
-        emit(
-            ctx,
-            f"  запись Excel: {len(sorg_frames)} листов (по SOrg), "
-            f"лимит {EXCEL_MAX_ROWS} строк на лист",
-        )
-        result = pd.concat([df for _, df in sorg_frames], ignore_index=True)
-        return self._write_result(
-            ctx, result, out_path, t0, data_sheets=sorg_frames
-        )
+        paths: list[Path] = []
+        for i, (cfg, folder) in enumerate(runs, 1):
+            if log:
+                log(f"\n--- SOrg {folder} [{i}/{len(runs)}] ---\n")
+            paths.append(ReportBuilder(self.config_path, cfg=cfg).run(log=log))
+
+        if log and len(paths) > 1:
+            names = ", ".join(p.name for p in paths)
+            log(f"\n  готово: {len(paths)} файлов ({names})")
+
+        return paths
 
     def _print_header(
         self,
@@ -624,8 +584,7 @@ class ReportBuilder:
             if "too large" in str(e).lower() or "sheet size" in str(e).lower():
                 raise ValueError(
                     f"Слишком много строк для одного листа Excel (лимит {EXCEL_MAX_ROWS}). "
-                    f"Используйте режим «все папки» (a / --all) — по листу на SOrg, "
-                    f"или соберите один SOrg: python merge_columns.py -s 3805"
+                    f"Соберите один SOrg: python merge_columns.py -s 3805"
                 ) from e
             raise
 
@@ -711,5 +670,5 @@ def build_merge_all(
     config_path: Path,
     runs: list[tuple[dict[str, Any], str]],
     log: Callable[[str], None] | None = None,
-) -> Path:
+) -> list[Path]:
     return ReportBuilder(config_path).run_all(runs, log=log)
