@@ -330,9 +330,11 @@ sources:
     sheet: 0
     merge_on:
       left: ["ZW", "ZW_SO"]
-      right: ["Customer", "SOrg."]
+      right: ["ZwPartner", "SOrg."]
     dedupe: false
     columns:
+      - name: "ZwPartner"
+        source: "Customer"
       - name: "ZW_CH6"
         source: "HgLvCust."
       - name: "ZW_CH6_Name"

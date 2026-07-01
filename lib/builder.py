@@ -151,7 +151,7 @@ class ReportBuilder:
             if any(str(s.get("file", "")) == ctx.zw_ch6_file for s in sources):
                 emit(
                     ctx,
-                    f"  {ctx.zw_ch6_file}: ZW_CH6, ZW_CH6_Name по ZW + ZW_SO",
+                    f"  {ctx.zw_ch6_file}: ZW_CH6, ZW_CH6_Name по Customer (без SOrg.)",
                 )
 
         result = self._build_dataframe(ctx)
@@ -254,7 +254,7 @@ class ReportBuilder:
         if not has_zw_ch6:
             emit(ctx, f"  ОШИБКА КОНФИГА: нет источника {ctx.zw_ch6_file!r}")
         elif ctx.verbose:
-            emit(ctx, f"  {ctx.zw_ch6_file}: OK (merge по ZW + ZW_SO)")
+            emit(ctx, f"  {ctx.zw_ch6_file}: OK (merge по Customer, без SOrg.)")
         if not has_ch6 and ctx.verbose:
             emit(ctx, f"  запасной источник {ctx.zw_ch6_file}: нет")
         if ctx.default_merge is not None and ctx.verbose:

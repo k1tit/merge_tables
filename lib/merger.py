@@ -231,7 +231,7 @@ class DataMerger:
         return series.fillna("").astype(str).str.strip().ne("")
 
     def _finalize_zw_rows(self, result: pd.DataFrame) -> pd.DataFrame:
-        """ZW из ZwPartner; убрать пустые дубликаты, если у Customer уже есть ZW/ZW_SO."""
+        """ZW по Customer (без SOrg.): заполнить пустые ячейки из других строк того же клиента."""
         out = result.copy()
         if "ZwPartner" in out.columns:
             if "ZW" in out.columns:
@@ -240,7 +240,25 @@ class DataMerger:
                     out.loc[need, "ZW"] = out.loc[need, "ZwPartner"]
             out = out.drop(columns=["ZwPartner"], errors="ignore")
 
-        if not {"Customer", "ZW", "ZW_SO"}.issubset(out.columns):
+        if "Customer" not in out.columns:
+            return out
+
+        zw_cols = [
+            c
+            for c in (
+                "ZW",
+                "ZW_SO",
+                "ZW_A7",
+                "ZW_CGrp",
+                "ZW_CH6",
+                "ZW_CH6_Name",
+            )
+            if c in out.columns
+        ]
+        for col in zw_cols:
+            out[col] = self._fill_customer_column(out, col)
+
+        if not {"ZW", "ZW_SO"}.issubset(out.columns):
             return out
 
         row_has = self._filled(out["ZW"]) | self._filled(out["ZW_SO"])
@@ -255,6 +273,22 @@ class DataMerger:
                 f"(у Customer уже есть данные ZW)",
             )
         return out.loc[~orphan].copy()
+
+    def _fill_customer_column(self, df: pd.DataFrame, col: str) -> pd.Series:
+        series = df[col].copy()
+        filled = self._filled(series)
+        if not filled.any():
+            return series
+        refs = (
+            df.loc[filled, ["Customer", col]]
+            .drop_duplicates("Customer", keep="first")
+            .set_index("Customer")[col]
+        )
+        has = df["Customer"].map(filled.groupby(df["Customer"], dropna=False).any())
+        fill_mask = ~filled & has.fillna(False)
+        if fill_mask.any():
+            series.loc[fill_mask] = df.loc[fill_mask, "Customer"].map(refs)
+        return series
 
     @staticmethod
     def _rename_colliding_right_keys(

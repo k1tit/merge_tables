@@ -65,6 +65,9 @@ class ColumnSpecParser:
     ) -> tuple[list[str], list[str]]:
         out_names = [p["name"] for p in plain_specs]
         for spec in computed:
+            name = str(spec["name"])
+            if name not in out_names:
+                out_names.append(name)
             for col in spec["from"]:
                 if col not in out_names:
                     out_names.append(col)
