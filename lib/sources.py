@@ -11,6 +11,7 @@ from .context import BuildContext
 from .log_sink import emit
 from .paths import PathResolver
 from .text_utils import TextNorm
+from .zw_link import load_zw_partner_map, sold_to_key
 
 
 class ExcelSourceReader:
@@ -19,6 +20,46 @@ class ExcelSourceReader:
     def __init__(self, ctx: BuildContext) -> None:
         self.ctx = ctx
         self.paths = PathResolver.from_config(ctx.base_dir, ctx.config)
+        self._zw_kunnr: set[str] | None = None
+        self._zw_ktonr_map: dict[str, str] | None = None
+
+    def _zw_partner_lookup(self) -> tuple[set[str], dict[str, str]]:
+        if self._zw_kunnr is None:
+            zw_rel = f"{self.ctx.sorg_template} ZW"
+            path = self.paths.resolve(zw_rel)
+            if not path.exists():
+                self._zw_kunnr = set()
+                self._zw_ktonr_map = {}
+            else:
+                self._zw_kunnr, self._zw_ktonr_map = load_zw_partner_map(
+                    path, engine=self.ctx.read_engine
+                )
+        return self._zw_kunnr, self._zw_ktonr_map
+
+    @staticmethod
+    def _is_zw_base_file(rel: str) -> bool:
+        return "zw base" in Path(rel).stem.casefold()
+
+    def _add_sold_to_key(self, df: pd.DataFrame, rel: str) -> pd.DataFrame:
+        source_col = (
+            "Customer"
+            if "Customer" in df.columns
+            else "ZwPartner"
+            if "ZwPartner" in df.columns
+            else None
+        )
+        if source_col is None:
+            raise KeyError(
+                f"Для SoldTo в {rel!r} нужна колонка Customer или ZwPartner."
+            )
+        kunnr_set, ktonr_map = self._zw_partner_lookup()
+        out = df.copy()
+        out["SoldTo"] = out[source_col].map(
+            lambda v, ks=kunnr_set, km=ktonr_map: sold_to_key(
+                v, kunnr_set=ks, ktonr_map=km
+            )
+        )
+        return out
 
     def read(
         self,
@@ -38,9 +79,17 @@ class ExcelSourceReader:
             spec["columns"]
         )
         if merge_right:
-            plain_specs = ColumnResolver.ensure_merge_keys(
-                plain_specs, merge_right, key_excel
-            )
+            excel_keys = [k for k in merge_right if k != "SoldTo"]
+            if excel_keys:
+                plain_specs = ColumnResolver.ensure_merge_keys(
+                    plain_specs, excel_keys, key_excel
+                )
+            if "SoldTo" in merge_right and not any(
+                p["name"] in ("Customer", "ZwPartner") for p in plain_specs
+            ):
+                plain_specs.append(
+                    {"name": "Customer", "excel": "Customer", "optional": False}
+                )
         out_names, excel_unique = ColumnSpecParser.needed(plain_specs, inline_computed)
 
         header = pd.read_excel(
@@ -113,6 +162,8 @@ class ExcelSourceReader:
 
         agg_only = set(spec.get("aggregate") or {}) - {p["name"] for p in plain_specs}
         required = [c for c in out_names if c not in agg_only]
+        if merge_right and "SoldTo" in merge_right:
+            required = [c for c in required if c != "Customer"]
         missing_out = [c for c in required if c not in df.columns]
         if missing_out:
             raise KeyError(
@@ -124,6 +175,12 @@ class ExcelSourceReader:
         out = df.copy()
         computed = inline_computed + list(spec.get("computed_columns") or [])
         out = ComputedColumnsApplier.apply(out, computed or None)
+        if merge_right and "SoldTo" in merge_right and self._is_zw_base_file(rel):
+            out = self._add_sold_to_key(out, rel)
+        if merge_right:
+            for key in merge_right:
+                if key not in out_names and key in out.columns:
+                    out_names.append(key)
         if column_order:
             cols = [c for c in column_order if c in out.columns]
             rest = [c for c in out.columns if c not in cols]

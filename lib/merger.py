@@ -31,7 +31,7 @@ class DataMerger:
         result = frames[0]
         for spec, part in zip(source_specs[1:], frames[1:], strict=True):
             result = self._merge_source_into(result, spec, part, label="merge")
-        return result
+        return self._finalize_zw_rows(result)
 
     def merge_post(
         self,
@@ -227,6 +227,36 @@ class DataMerger:
         return out
 
     @staticmethod
+    def _filled(series: pd.Series) -> pd.Series:
+        return series.fillna("").astype(str).str.strip().ne("")
+
+    def _finalize_zw_rows(self, result: pd.DataFrame) -> pd.DataFrame:
+        """ZW из ZwPartner; убрать пустые дубликаты, если у Customer уже есть ZW/ZW_SO."""
+        out = result.copy()
+        if "ZwPartner" in out.columns:
+            if "ZW" in out.columns:
+                need = self._filled(out["ZW_SO"]) & ~self._filled(out["ZW"])
+                if need.any():
+                    out.loc[need, "ZW"] = out.loc[need, "ZwPartner"]
+            out = out.drop(columns=["ZwPartner"], errors="ignore")
+
+        if not {"Customer", "ZW", "ZW_SO"}.issubset(out.columns):
+            return out
+
+        row_has = self._filled(out["ZW"]) | self._filled(out["ZW_SO"])
+        customer_has = out.assign(_zw=row_has).groupby("Customer", dropna=False)[
+            "_zw"
+        ].transform("any")
+        orphan = customer_has & ~self._filled(out["ZW"]) & ~self._filled(out["ZW_SO"])
+        if orphan.any() and self.ctx.verbose:
+            emit(
+                self.ctx,
+                f"  удалено {int(orphan.sum())} строк-дубликатов без ZW/ZW_SO "
+                f"(у Customer уже есть данные ZW)",
+            )
+        return out.loc[~orphan].copy()
+
+    @staticmethod
     def _rename_colliding_right_keys(
         result: pd.DataFrame,
         part: pd.DataFrame,
@@ -278,6 +308,12 @@ class DataMerger:
             part = DataAggregator.apply(part, aggregate, right)
         elif dedupe:
             part = part.drop_duplicates(subset=right, keep="first")
+
+        for key in right:
+            if key in part.columns:
+                part = part[
+                    part[key].fillna("").astype(str).str.strip().ne("")
+                ]
 
         overwrite = {str(c).strip() for c in (overwrite_columns or []) if str(c).strip()}
         drop_from_part = [

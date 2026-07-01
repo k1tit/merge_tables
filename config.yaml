@@ -312,7 +312,7 @@ sources:
     sheet: 0
     merge_on:
       left: ["ZW"]
-      right: ["Customer"]
+      right: ["ZwPartner"]
     dedupe: false
     overwrite_columns: ["CGrp"]
     columns:
@@ -323,6 +323,8 @@ sources:
         source: "A7"
       - name: "ZW_CGrp"
         from: ["CGrp"]
+      - name: "ZwPartner"
+        source: "Customer"
 
   - file: "3805 ZW CH6"
     sheet: 0
