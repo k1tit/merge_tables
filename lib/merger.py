@@ -227,6 +227,27 @@ class DataMerger:
         return out
 
     @staticmethod
+    def _rename_colliding_right_keys(
+        result: pd.DataFrame,
+        part: pd.DataFrame,
+        left: list[str],
+        right: list[str],
+    ) -> tuple[pd.DataFrame, list[str]]:
+        """Ключи справа с тем же именем, что колонки Base (Customer, SOrg.), — во временные."""
+        rename_map: dict[str, str] = {}
+        new_right: list[str] = []
+        for key in right:
+            if key in result.columns and key not in left:
+                alias = f"__merge_key__{key}"
+                rename_map[key] = alias
+                new_right.append(alias)
+            else:
+                new_right.append(key)
+        if rename_map:
+            part = part.rename(columns=rename_map)
+        return part, new_right
+
+    @staticmethod
     def _merge_one(
         result: pd.DataFrame,
         part: pd.DataFrame,
@@ -250,6 +271,7 @@ class DataMerger:
                 )
 
         result = MergeKeysParser.normalize_frame(result, left)
+        part, right = DataMerger._rename_colliding_right_keys(result, part, left, right)
         part = MergeKeysParser.normalize_frame(part, right)
 
         if aggregate:
