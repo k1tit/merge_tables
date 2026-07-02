@@ -146,6 +146,7 @@ class DataMerger:
             return part, None
 
         filtered = part
+        applied: list[str] = []
         for col, raw_val in filt.items():
             col_name = str(col).strip()
             if col_name not in filtered.columns:
@@ -153,23 +154,27 @@ class DataMerger:
             val = str(raw_val).replace("{sorg}", self.ctx.sorg)
             series = filtered[col_name].map(TextNorm.key_value)
             filtered = filtered.loc[series == TextNorm.key_value(val)]
+            applied.append(f"{col_name}={val}")
+
+        if not applied:
+            return part, None
 
         if not filtered.empty:
             return filtered, (
                 f"  фильтр справочника {spec.get('file')!r}: "
-                f"SO Trade Name={self.ctx.sorg!r}, строк {len(filtered)}"
+                f"{', '.join(applied)}, строк {len(filtered)}"
             )
 
         fallback = str(spec.get("reference_filter_fallback", "")).strip()
         if fallback == "trade_name_only":
             return part, (
-                f"  ВНИМАНИЕ: в справочнике {spec.get('file')!r} нет SO Trade Name="
-                f"{self.ctx.sorg!r} — join TN только по Trade Name"
+                f"  ВНИМАНИЕ: в справочнике {spec.get('file')!r} нет "
+                f"{', '.join(applied)} — join TN только по Trade Name"
             )
 
         return filtered, (
             f"  ВНИМАНИЕ: в справочнике {spec.get('file')!r} нет строк для "
-            f"SO Trade Name={self.ctx.sorg!r}"
+            f"{', '.join(applied)}"
         )
 
     def _enrich_part(

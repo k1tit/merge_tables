@@ -100,6 +100,10 @@ class ExcelSourceReader:
                     {"name": "Customer", "excel": "Customer", "optional": False}
                 )
         out_names, excel_unique = ColumnSpecParser.needed(plain_specs, inline_computed)
+        for col in (spec.get("reference_filter") or {}):
+            key = str(col).strip()
+            if key and key not in excel_unique:
+                excel_unique.append(key)
 
         header = pd.read_excel(
             path, sheet_name=sheet, nrows=0, engine=self.ctx.read_engine
@@ -129,6 +133,12 @@ class ExcelSourceReader:
         for col in list(df.columns):
             if TextNorm.is_id_column(col):
                 df[col] = df[col].map(TextNorm.key_value)
+
+        df, filter_note = self._apply_reference_filter_raw(
+            df, spec, rename_for_usecols
+        )
+        if filter_note and self.ctx.verbose:
+            emit(self.ctx, filter_note)
 
         rename_map = {}
         for p in plain_specs:
@@ -221,6 +231,43 @@ class ExcelSourceReader:
                     f"  {rel!r}: удалено {removed} полных дублей строк",
                 )
         return out
+
+    def _apply_reference_filter_raw(
+        self,
+        df: pd.DataFrame,
+        spec: dict[str, Any],
+        rename_for_usecols: dict[str, str],
+    ) -> tuple[pd.DataFrame, str | None]:
+        filt = spec.get("reference_filter")
+        if not filt:
+            return df, None
+
+        filtered = df
+        applied: list[str] = []
+        for col, raw_val in filt.items():
+            col_name = str(col).strip()
+            actual = rename_for_usecols.get(col_name, col_name)
+            use_col = actual if actual in filtered.columns else col_name
+            if use_col not in filtered.columns:
+                continue
+            val = str(raw_val).replace("{sorg}", self.ctx.sorg_template)
+            series = filtered[use_col].map(TextNorm.key_value)
+            filtered = filtered.loc[series == TextNorm.key_value(val)]
+            applied.append(f"{col_name}={val}")
+
+        if not applied:
+            return df, None
+
+        if filtered.empty:
+            return filtered, (
+                f"  ВНИМАНИЕ: в справочнике {spec.get('file')!r} нет строк для "
+                f"{', '.join(applied)}"
+            )
+
+        return filtered, (
+            f"  фильтр справочника {spec.get('file')!r}: "
+            f"{', '.join(applied)}, строк {len(filtered)}"
+        )
 
     def _read_subset(
         self,
