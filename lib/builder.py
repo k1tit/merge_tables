@@ -163,7 +163,78 @@ class ReportBuilder:
                 f"строк: {len(result)}",
             )
 
-        return self._write_result(ctx, result, out_path, t0)
+        out_path = self._write_result(ctx, result, out_path, t0)
+        self._write_cgrp_splits(ctx, result)
+        return out_path
+
+    @staticmethod
+    def _norm_split_value(val: Any) -> str:
+        return TextNorm.key_value(val).upper()
+
+    def _filter_cgrp_split(
+        self, df: pd.DataFrame, *, cgrp: str, grp4: str
+    ) -> pd.DataFrame:
+        if "CGrp" not in df.columns or "Grp4" not in df.columns:
+            raise KeyError(
+                "Для cgrp_splits нужны колонки CGrp и Grp4 в отчёте."
+            )
+        want_cgrp = self._norm_split_value(cgrp)
+        want_grp4 = self._norm_split_value(grp4)
+        cgrp_series = df["CGrp"].map(self._norm_split_value)
+        grp4_series = df["Grp4"].map(self._norm_split_value)
+        return df.loc[cgrp_series.eq(want_cgrp) & grp4_series.eq(want_grp4)].copy()
+
+    def _write_cgrp_splits(
+        self, ctx: BuildContext, result: pd.DataFrame
+    ) -> list[Path]:
+        spec = ctx.config.get("cgrp_splits")
+        if not spec:
+            return []
+
+        files = spec.get("files") or []
+        if not files:
+            return []
+
+        sorg = str(ctx.config.get("sorg") or ctx.sorg).strip()
+        dir_template = str(spec.get("dir", "merge_{sorg}"))
+        out_dir = ctx.base_dir / dir_template.format(sorg=sorg)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        cfg = ctx.config
+        text_columns = [str(c) for c in (cfg.get("text_columns") or [])]
+        paths: list[Path] = []
+
+        if ctx.verbose:
+            emit(ctx, f"  разбивка по CGrp/Grp4 → {out_dir.name}/")
+
+        for item in files:
+            cgrp = str(item.get("cgrp", "")).strip()
+            grp4 = str(item.get("grp4", "")).strip()
+            name = str(item.get("name") or item.get("file") or f"{cgrp} {grp4}.xlsx").strip()
+            if not cgrp or not grp4 or not name:
+                continue
+
+            part = self._filter_cgrp_split(result, cgrp=cgrp, grp4=grp4)
+            out_path = out_dir / name
+            self._write(
+                part,
+                out_path,
+                ctx.write_engine,
+                text_columns=text_columns,
+                leading_zero_columns=cfg.get("leading_zero_columns"),
+                column_colors=cfg.get("column_colors"),
+                autofit_columns=bool(cfg.get("excel_autofit_columns", True)),
+                autofit_sample_rows=int(cfg.get("excel_autofit_sample_rows", 1000)),
+                autofit_max_width=int(cfg.get("excel_autofit_max_width", 55)),
+            )
+            paths.append(out_path)
+            if ctx.verbose:
+                emit(
+                    ctx,
+                    f"    {out_dir.name}/{name}: {len(part)} строк "
+                    f"(CGrp={cgrp}, Grp4={grp4})",
+                )
+        return paths
 
     def _write_result(
         self,
