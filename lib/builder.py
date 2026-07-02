@@ -285,11 +285,8 @@ class ReportBuilder:
             trade_name_split = trade_mask & ~in_bucket
         else:
             trade_name_split = pd.Series(False, index=df.index)
-        if split_cfg.get("require_trade_name_for_splits", True):
-            bucket_split = trade_mask & in_bucket
-        else:
-            bucket_split = in_bucket
-        return bucket_split | trade_name_split
+        # Из основного файла убираем все строки с bucket (ADI/AIN/…), не только с Trade Name.
+        return in_bucket | trade_name_split
 
     @staticmethod
     def _bucket_from_item(item: Any) -> str:

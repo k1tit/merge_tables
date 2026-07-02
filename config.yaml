@@ -10,7 +10,7 @@
 #   5. cgrp_splits     — merge_{sorg}/:
 #        Trade Name.xlsx — строки с заполненным Trade Name (не в bucket);
 #        ADI/AIN/BDI/BIN, QDI+QIN — bucket-файлы;
-#        основной файл — всё, что не попало в Trade Name / ADI / AIN / BDI / BIN / QDI QIN
+#        основной файл — без Check bucket ADI/AIN/BDI/BIN/QDI/QIN и без Trade Name из split
 #
 # ПУТИ К ФАЙЛАМ (lib/paths.py, lib/sorg.py):
 #   - Base, CH6, ZW…: папка {sorg} (3801–3806), имена «3805 …» → «{sorg} …»
