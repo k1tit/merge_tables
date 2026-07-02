@@ -443,6 +443,63 @@ class ReportBuilder:
             )
         return out_path
 
+    @staticmethod
+    def _split_output_filenames(spec: dict[str, Any], sorg: str) -> set[str]:
+        """Имена xlsx, которые должны остаться в merge_{sorg}/ после разбивки."""
+        names: set[str] = set()
+        template = str(spec.get("output_file") or "merge_columns_{sorg}.xlsx")
+        names.add(Path(template.format(sorg=sorg)).name)
+
+        trade_name_file = str(spec.get("trade_name_file", "Trade Name.xlsx")).strip()
+        if trade_name_file:
+            names.add(trade_name_file)
+
+        for item in spec.get("files") or spec.get("buckets") or []:
+            bucket = ReportBuilder._bucket_from_item(item)
+            if not bucket:
+                continue
+            if isinstance(item, str):
+                names.add(f"{bucket}.xlsx")
+            else:
+                names.add(
+                    str(
+                        item.get("name") or item.get("file") or f"{bucket}.xlsx"
+                    ).strip()
+                )
+
+        for group in spec.get("groups") or []:
+            if isinstance(group, str):
+                names.add(f"{group.strip().upper()}.xlsx")
+                continue
+            buckets = [
+                str(b).strip().upper()
+                for b in (group.get("buckets") or [])
+                if str(b).strip()
+            ]
+            if not buckets:
+                continue
+            default_name = " ".join(buckets) + ".xlsx"
+            names.add(str(group.get("name") or group.get("file") or default_name).strip())
+        return names
+
+    @staticmethod
+    def _cleanup_stale_split_files(
+        ctx: BuildContext,
+        out_dir: Path,
+        keep_names: set[str],
+    ) -> None:
+        """Удалить устаревшие split-файлы (напр. A DI.xlsx после переименования в ADI.xlsx)."""
+        for path in sorted(out_dir.glob("*.xlsx")):
+            if path.name in keep_names:
+                continue
+            try:
+                path.unlink()
+            except OSError as exc:
+                emit(ctx, f"  ВНИМАНИЕ: не удалить {path.name}: {exc}")
+                continue
+            if ctx.verbose:
+                emit(ctx, f"  удалён устаревший split: {path.name}")
+
     def _write_cgrp_splits(
         self,
         ctx: BuildContext,
@@ -467,6 +524,10 @@ class ReportBuilder:
         dir_template = str(spec.get("dir", "merge_{sorg}"))
         out_dir = ctx.base_dir / dir_template.format(sorg=sorg)
         out_dir.mkdir(parents=True, exist_ok=True)
+
+        split_spec = {**spec, "output_file": ctx.config.get("output_file")}
+        keep_names = self._split_output_filenames(split_spec, sorg)
+        self._cleanup_stale_split_files(ctx, out_dir, keep_names)
 
         cfg = ctx.config
         text_columns = [str(c) for c in (cfg.get("text_columns") or [])]
