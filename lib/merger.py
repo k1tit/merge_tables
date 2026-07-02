@@ -113,11 +113,11 @@ class DataMerger:
                 msg += " (колонка создана, но merge не добавил — проверьте ключи)"
             msg += f", ключ совпал у {overlap} строк"
             emit(self.ctx, msg)
-            if overlap == 0 and label == "post-merge" and "Customer Key" in left:
+            if overlap == 0 and label == "post-merge" and "Key" in left:
                 emit(
                     self.ctx,
-                    "    Подсказка: Customer Key должен совпадать с колонкой «Ключ» "
-                    "в справочнике (суффикс 380N, не код SOrg)",
+                    "    Подсказка: Key отчёта должен совпадать с колонкой Key/Ключ "
+                    "в справочнике (Grp4+CGrp+A7+ZW_A7+Indus.)",
                 )
             for col in added:
                 if col in result.columns:

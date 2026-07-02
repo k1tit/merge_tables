@@ -75,6 +75,8 @@ class PathResolver:
 
         if rel_stem in ("Справочник Ключ-Иерархия",) or "Ключ-Иерархия" in rel_stem:
             found = self._find_by_headers(["Ключ", "Узел"], self.reference_root)
+            if found is None:
+                found = self._find_by_headers(["Key", "Узел"], self.reference_root)
             if found:
                 return found
 
@@ -127,6 +129,15 @@ class PathResolver:
                 if TextNorm.name("Ключ") in found and (
                     TextNorm.name("Иерархия") in found
                     or TextNorm.name("Узел") in found
+                ):
+                    return path
+            if need == {TextNorm.name("key"), TextNorm.name("узел")}:
+                if (
+                    TextNorm.name("key") in found
+                    or TextNorm.name("ключ") in found
+                ) and (
+                    TextNorm.name("узел") in found
+                    or TextNorm.name("иерархия") in found
                 ):
                     return path
         return None

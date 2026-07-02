@@ -168,6 +168,9 @@ class ColumnResolver:
                 if "higher-level" in col_norm and "higher" in ex_norm and "customer" in ex_norm:
                     found = excel_name
                     break
+                if col_norm == "key" and ex_norm in ("ключ", "key"):
+                    found = excel_name
+                    break
                 if col_norm == "узел" and (
                     ex_norm == "узел"
                     or ex_norm == "иерархия"

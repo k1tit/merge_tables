@@ -297,25 +297,29 @@ checks:
     ok: "true"
     fail: "false"
 
-# Join ПОСЛЕ computed_columns (нужны Customer Key и Key_CH6)
+# Join ПОСЛЕ computed_columns (нужен Key и Key_CH6)
 post_sources:
-  # Key_CH6: Customer Key → Ключ в справочнике → узел Иерархия
+  # Key_CH6: Key отчёта → Key/Ключ в справочнике → Узел/Иерархия
   - file: "Справочник Ключ-Иерархия"
     sheet: 0
     merge_on:
-      left: ["Customer Key"]
-      right: ["Ключ"]
+      left: ["Key"]
+      right: ["Key"]
+    key_excel:
+      Key: "Ключ"
     dedupe: true
     columns:
       - name: "Key_CH6"
-        source: "Иерархия"
+        source: "Узел"
 
-  # Key_CH6_Name: Key_CH6 → Иерархия → Название узла
+  # Key_CH6_Name: Key_CH6 → Узел/Иерархия → Название узла
   - file: "Справочник Ключ-Иерархия"
     sheet: 0
     merge_on:
       left: ["Key_CH6"]
-      right: ["Иерархия"]
+      right: ["Узел"]
+    key_excel:
+      Узел: "Иерархия"
     dedupe: true
     columns:
       - name: "Key_CH6_Name"
