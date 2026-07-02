@@ -6,6 +6,8 @@ import pandas as pd
 
 from .text_utils import TextNorm
 
+_DASH_PLACEHOLDERS = frozenset({"--", "---"})
+
 
 class CheckEngine:
     """Проверки качества данных (колонки Check *)."""
@@ -13,9 +15,10 @@ class CheckEngine:
     def __init__(self) -> None:
         self._handlers: dict[str, Callable[[pd.DataFrame, dict[str, Any]], pd.Series]] = {
             "match_when_in_either": self._match_when_in_either,
-            "ch6_customer_vs_zw_ch6": self._ch6_customer_vs_compare,
-            "ch6_customer_vs_tn_ch6": self._ch6_customer_vs_compare,
-            "ch6_customer_vs_key_ch6": self._ch6_customer_vs_compare,
+            "compare_match_empty": self._compare_match_empty,
+            "ch6_customer_vs_zw_ch6": self._compare_match_empty,
+            "ch6_customer_vs_tn_ch6": self._compare_match_empty,
+            "ch6_customer_vs_key_ch6": self._compare_match_empty,
         }
 
     def apply(self, df: pd.DataFrame, specs: list[dict[str, Any]] | None) -> pd.DataFrame:
@@ -30,7 +33,7 @@ class CheckEngine:
             if handler is None:
                 raise ValueError(
                     f"Неизвестный тип проверки {check_type!r}. "
-                    f"Доступно: {', '.join(self._handlers)}"
+                    f"Доступно: {', '.join(sorted(self._handlers))}"
                 )
             out[name] = handler(out, spec)
         return out
@@ -63,7 +66,97 @@ class CheckEngine:
             if val not in allowed_norm:
                 return False
 
-        return bool(all_non_empty or column_in)
+        if not all_non_empty and not column_in:
+            return True
+        return True
+
+    @staticmethod
+    def _norm_compare(val: Any) -> str:
+        return TextNorm.norm_customer_node(val)
+
+    @staticmethod
+    def _empty_result(empty_label: str):
+        return empty_label if empty_label else pd.NA
+
+    def _compare_outcome(
+        self,
+        left_val: Any,
+        right_val: Any,
+        spec: dict[str, Any],
+    ) -> str:
+        empty_label = str(spec.get("empty", ""))
+        ok_label = str(spec.get("ok", "true"))
+        fail_label = str(spec.get("fail", "false"))
+        dash_match = bool(spec.get("dash_match", False))
+        list_compare = bool(spec.get("list_compare", False))
+        sep = str(spec.get("separator", ", "))
+
+        left = self._norm_compare(left_val)
+        right_norm = self._norm_compare(right_val)
+
+        if list_compare:
+            right_parts = {
+                self._norm_compare(v)
+                for v in TextNorm.split_aggregated(right_val, separator=sep)
+            }
+            right_parts.discard("")
+            if not left and not right_parts:
+                return self._empty_result(empty_label)
+            if not left or not right_parts:
+                return self._empty_result(empty_label)
+            matched = left in right_parts
+        else:
+            if not left and not right_norm:
+                return self._empty_result(empty_label)
+            if not left or not right_norm:
+                return self._empty_result(empty_label)
+            if left == right_norm:
+                matched = True
+            elif dash_match and left in _DASH_PLACEHOLDERS and right_norm in _DASH_PLACEHOLDERS:
+                matched = True
+            else:
+                matched = False
+
+        return ok_label if matched else fail_label
+
+    def _compare_match_empty(
+        self, df: pd.DataFrame, spec: dict[str, Any]
+    ) -> pd.Series:
+        left_col = str(
+            spec.get("left_column")
+            or spec.get("ch6_customer_column")
+            or spec.get("columns", [None])[0]
+            or "CH6"
+        )
+        right_col = str(
+            spec.get("right_column")
+            or spec.get("compare_column")
+            or spec.get("zw_ch6_column")
+            or spec.get("tn_ch6_column")
+            or spec.get("columns", [None, None])[1]
+            or "ZW_CH6"
+        )
+        skip_label = spec.get("skip", pd.NA)
+
+        if spec.get("type") == "ch6_customer_vs_key_ch6":
+            spec = {**spec, "dash_match": spec.get("dash_match", True)}
+        if spec.get("type") == "ch6_customer_vs_tn_ch6" or right_col == "TN_CH6":
+            spec = {**spec, "list_compare": spec.get("list_compare", True)}
+
+        for col in (left_col, right_col):
+            if col not in df.columns:
+                raise KeyError(f"Проверка {spec.get('name')!r}: нет колонки {col!r}.")
+
+        result = pd.Series(skip_label, index=df.index, dtype=object)
+        for idx in df.index:
+            if not self._row_in_scope(df, idx, spec):
+                continue
+            result.at[idx] = self._compare_outcome(
+                df.at[idx, left_col],
+                df.at[idx, right_col],
+                spec,
+            )
+        return result
 
     def _match_when_in_either(
         self, df: pd.DataFrame, spec: dict[str, Any]
@@ -87,36 +180,4 @@ class CheckEngine:
         applies = a.isin(trigger) | b.isin(trigger)
         result = pd.Series(ok_label, index=df.index, dtype=object)
         result.loc[applies & (a != b)] = fail_label
-        return result
-
-    def _ch6_customer_vs_compare(
-        self, df: pd.DataFrame, spec: dict[str, Any]
-    ) -> pd.Series:
-        ch6_col = str(spec.get("ch6_customer_column", "CH6"))
-        compare_col = str(
-            spec.get("compare_column")
-            or spec.get("zw_ch6_column")
-            or spec.get("tn_ch6_column")
-            or "ZW_CH6"
-        )
-        sep = str(spec.get("separator", ", "))
-        ok_label = str(spec.get("ok", "true"))
-        fail_label = str(spec.get("fail", "false"))
-        skip_label = str(spec.get("skip", ok_label))
-
-        for col in (ch6_col, compare_col):
-            if col not in df.columns:
-                raise KeyError(f"Проверка {spec.get('name')!r}: нет колонки {col!r}.")
-
-        result = pd.Series(skip_label, index=df.index, dtype=object)
-        for idx in df.index:
-            if not self._row_in_scope(df, idx, spec):
-                continue
-            ch6_val = df.at[idx, ch6_col]
-            compare_val = df.at[idx, compare_col]
-            result.at[idx] = (
-                ok_label
-                if TextNorm.customer_node_in_list(ch6_val, compare_val, separator=sep)
-                else fail_label
-            )
         return result

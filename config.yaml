@@ -25,6 +25,7 @@
 #   aggregate           — склеить несколько строк справа в одну (через запятую)
 #   merge_require_non_empty — очистить добавленные колонки, если ключ пустой
 #   enrich_from         — (редко) предварительный join внутри part перед основным
+#   read_dedupe         — удалить дубли строк в выгрузке до merge (ключи Excel)
 #
 # ЛОГИКА В КОДЕ, НЕ ОПИСАННАЯ В БЛОКАХ НИЖЕ (lib/sources.py, lib/merger.py):
 #   • ZW / ZW base / ZW CH6 читаются из папки текущего {sorg} (как Base).
@@ -88,6 +89,7 @@ column_order:  # порядок колонок в итоговом Excel (ост
   - "Check CH6_CGrp_KA"
   - "ZW"
   - "ZW_SO"
+  - "Check SO ZW_SO"
   - "ZW_A7"
   - "ZW_CGrp"
   - "ZW_CH6"
@@ -102,6 +104,8 @@ column_order:  # порядок колонок в итоговом Excel (ост
   - "Key_CH6"
   - "Key_CH6_Name"
   - "Check CH6 Customer & Key_CH6"
+  - "Key_CH_SO"
+  - "Check SO and key ch_so"
 
 # Вычисляются ПОСЛЕ sources[], ДО post_sources[] (lib/computed.py)
 computed_columns:
@@ -184,9 +188,12 @@ column_colors:  # заливка заголовков в Excel (lib/builder.py)
     - "Check CH6 Customer & TN"
     - "Check_TN_CGrp"
     - "Check CH6 Customer & Key_CH6"
+    - "Check SO ZW_SO"
+    - "Check SO and key ch_so"
   DCECF8:
     - "ZW"
     - "ZW_SO"
+    - "Check SO ZW_SO"
     - "ZW_A7"
     - "ZW_CGrp"
     - "ZW_CH6"
@@ -199,6 +206,7 @@ column_colors:  # заливка заголовков в Excel (lib/builder.py)
     - "Key"
     - "Key_CH6"
     - "Key_CH6_Name"
+    - "Key_CH_SO"
 
 excel_autofit_columns: true
 excel_autofit_sample_rows: 1000
@@ -206,7 +214,7 @@ excel_autofit_max_width: 55
 
 verbose: true
 
-checks:  # apply_when: если условие не выполнено → ok (часто true при пустом ZW)
+checks:
   - name: "Check CH6_CGrp_KA"
     type: match_when_in_either
     columns: ["CGrp", "CH6_CGrp"]
@@ -214,23 +222,29 @@ checks:  # apply_when: если условие не выполнено → ok (�
     ok: "true"
     fail: "false"
 
-  - name: "Check CH6 Customer & ZW"
-    type: ch6_customer_vs_zw_ch6
-    ch6_customer_column: "CH6"
-    zw_ch6_column: "ZW_CH6"
-    apply_when:  # проверка только если все три поля непустые и Grp4=IN
-      all_non_empty: ["CH6", "ZW_CH6", "ZW"]
-      column_in:
-        Grp4: ["IN"]
+  - name: "Check SO ZW_SO"
+    type: compare_match_empty
+    left_column: "SOrg."
+    right_column: "ZW_SO"
     ok: "true"
     fail: "false"
 
-  - name: "Check CH6 Customer & TN"
-    type: ch6_customer_vs_zw_ch6
-    ch6_customer_column: "CH6"
-    zw_ch6_column: "TN_CH6"
+  - name: "Check CH6 Customer & ZW"
+    type: compare_match_empty
+    left_column: "CH6"
+    right_column: "ZW_CH6"
+    ok: "true"
+    fail: "false"
     apply_when:
-      all_non_empty: ["CH6", "TN_CH6", "Trade Name"]
+      column_in:
+        Grp4: ["IN"]
+
+  - name: "Check CH6 Customer & TN"
+    type: compare_match_empty
+    left_column: "CH6"
+    right_column: "TN_CH6"
+    list_compare: true
+    separator: ", "
     ok: "true"
     fail: "false"
 
@@ -242,28 +256,34 @@ checks:  # apply_when: если условие не выполнено → ok (�
     fail: "false"
 
   - name: "Check CH6 Customer & Key_CH6"
-    type: ch6_customer_vs_key_ch6
-    ch6_customer_column: "CH6"
-    compare_column: "Key_CH6"
-    apply_when:
-      all_non_empty: ["CH6", "Key_CH6"]
+    type: compare_match_empty
+    left_column: "CH6"
+    right_column: "Key_CH6"
+    dash_match: true
     ok: "true"
     fail: "false"
 
-# Join ПОСЛЕ computed_columns (нужны Customer Key и Key_CH6)
+  - name: "Check SO and key ch_so"
+    type: compare_match_empty
+    left_column: "SOrg."
+    right_column: "Key_CH_SO"
+    ok: "true"
+    fail: "false"
+
+# Join ПОСЛЕ computed_columns (нужны Key и Key_CH6)
 post_sources:
-  # Key_CH6: Customer Key → Ключ → колонка Иерархия (узел)
+  # Key_CH6: Key → Ключ в справочнике → узел Иерархия
   - file: "Справочник Ключ-Иерархия"
     sheet: 0
     merge_on:
-      left: ["Customer Key"]
+      left: ["Key"]
       right: ["Ключ"]
     dedupe: true
     columns:
       - name: "Key_CH6"
         source: "Иерархия"
 
-  # Key_CH6_Name: Key_CH6 → Иерархия (узел в справочнике) → Название узла
+  # Key_CH6_Name: Key_CH6 → Иерархия → Название узла
   - file: "Справочник Ключ-Иерархия"
     sheet: 0
     merge_on:
@@ -274,11 +294,23 @@ post_sources:
       - name: "Key_CH6_Name"
         source: "Название узла"
 
+  # Key_CH_SO: Key_CH6 → 6th level в справочнике CH6 → SO
+  - file: "Справочник_CH6 SO"
+    sheet: 0
+    merge_on:
+      left: ["Key_CH6"]
+      right: ["6th level"]
+    dedupe: true
+    columns:
+      - name: "Key_CH_SO"
+        source: "SO"
+
 # Основная цепочка merge; первый блок — база, без merge_on
 sources:
-  # --- 1. База: все строки отчёта из папки {sorg} ---
+  # --- 1. База: все строки отчёта из папки {sorg}; A7 только отсюда ---
   - file: "3805 Base.xlsx"
     sheet: 0
+    read_dedupe: ["SOrg.", "Customer"]
     columns:
       - "SOrg."
       - "Customer"
@@ -302,6 +334,7 @@ sources:
   # --- 2. CH6 sold-to: иерархия по SOrg.+Customer ---
   - file: "3805 CH6"
     sheet: 0
+    read_dedupe: ["SOrg.", "Customer"]
     merge_on:
       left: ["SOrg.", "Customer"]
       right: ["SOrg.", "Customer"]
@@ -358,6 +391,7 @@ sources:
   # --- 5. ZW: sold-to → партнёр; файл из папки {sorg}; все строки файла (любой SOrg.) ---
   - file: "3805 ZW"
     sheet: 0
+    read_dedupe: ["KUNNR", "KTONR"]
     merge_on:
       left: ["Customer"]   # Base sold-to
       right: ["KUNNR"]    # sold-to в файле ZW
@@ -369,6 +403,7 @@ sources:
   # --- 6. ZW base: атрибуты партнёра; join ZW=ZwPartner; fan-out по SOrg. → ZW_SO ---
   - file: "3805 ZW base"
     sheet: 0
+    read_dedupe: ["Customer", "SOrg."]
     merge_on:
       left: ["ZW"]         # уже заполнен из шага 5
       right: ["ZwPartner"] # Customer в ZW base = партнёр (KTONR)
@@ -388,6 +423,7 @@ sources:
   # --- 7. ZW CH6: иерархия партнёра; ключ ZW + ZW_SO ---
   - file: "3805 ZW CH6"
     sheet: 0
+    read_dedupe: ["Customer", "SOrg."]
     merge_on:
       left: ["ZW", "ZW_SO"]
       right: ["ZwPartner", "SOrg."]  # SOrg. из ZW CH6 = ZW_SO после шага 6

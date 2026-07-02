@@ -27,6 +27,7 @@ ID_COLUMN_KEYS = frozenset(
 FILE_ALIASES = {
     "Справочник_CH6": "Справочник_CH6_CGrp.xlsx",
     "Справочник_CH6_CGrp": "Справочник_CH6_CGrp.xlsx",
+    "Справочник_CH6 SO": "Справочник_CH6.xlsx",
     "Справочник Ключ-Иерархия": "Справочник Ключ-Иерархия.xlsx",
     "Справочник At Work&Education": "Справочник At Work&Education.xlsx",
     "trade": "trade.xlsx",
