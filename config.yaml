@@ -338,7 +338,7 @@ post_sources:
 
 # Основная цепочка merge; первый блок — база, без merge_on
 sources:
-  # --- 1. База: все строки отчёта из папки {sorg}; A7 только отсюда ---
+  # --- 1. База: все строки отчёта из папки {sorg}; A7 и CGrp только отсюда ---
   - file: "3805 Base.xlsx"
     sheet: 0
     read_dedupe: true
@@ -439,15 +439,13 @@ sources:
       left: ["ZW"]         # уже заполнен из шага 5
       right: ["ZwPartner"] # Customer в ZW base = партнёр (KTONR)
     dedupe: false         # несколько SOrg. на партнёра → отдельная строка на каждый
-    overwrite_columns: ["CGrp"]  # CGrp партнёра может перезаписать Base CGrp
     columns:
-      - "CGrp"
       - name: "ZW_SO"
         source: "SOrg."    # SOrg. партнёра ZW (не Base.SOrg.)
       - name: "ZW_A7"
         source: "A7"
       - name: "ZW_CGrp"
-        from: ["CGrp"]      # копия CGrp партнёра (inline computed)
+        source: "CGrp"      # CGrp партнёра; Base.CGrp не трогаем
       - name: "ZwPartner"
         source: "Customer" # партнёр из файла; служебная, удаляется в _finalize_zw_rows
 
