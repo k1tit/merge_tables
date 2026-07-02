@@ -52,6 +52,25 @@ def resolve_output_path(ctx: BuildContext) -> Path:
     return ctx.base_dir / filename
 
 
+def cleanup_stale_root_output(ctx: BuildContext, out_path: Path) -> None:
+    """Удалить старый отчёт в корне проекта, если вывод теперь в merge_{sorg}/."""
+    root_copy = ctx.base_dir / out_path.name
+    if root_copy.resolve() == out_path.resolve():
+        return
+    if not root_copy.exists():
+        return
+    try:
+        root_copy.unlink()
+    except OSError as exc:
+        emit(ctx, f"  ВНИМАНИЕ: закройте {root_copy.name} в Excel и пересоберите ({exc})")
+        return
+    emit(
+        ctx,
+        f"  удалён устаревший отчёт в корне: {root_copy.name} "
+        f"(актуальный: {out_path.parent.name}/{out_path.name})",
+    )
+
+
 class ReportBuilder:
     """Оркестрация сборки merge_columns.xlsx."""
 
@@ -163,6 +182,7 @@ class ReportBuilder:
         t0 = time.perf_counter()
         sources: list[dict[str, Any]] = ctx.config.get("sources") or []
         out_path = resolve_output_path(ctx)
+        cleanup_stale_root_output(ctx, out_path)
         self._print_header(ctx, out_path, sources)
 
         t1 = time.perf_counter()

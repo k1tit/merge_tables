@@ -1,6 +1,9 @@
 # merge_columns
 
-Собирает **`merge_columns_3805.xlsx`** (и др. по SOrg) из Excel-выгрузок по **`config.yaml`**.
+Собирает отчёты в **`merge_3805/`** (и др. по SOrg) из Excel-выгрузок по **`config.yaml`**.
+
+> **Важно:** основной файл — **`merge_3805/merge_columns_3805.xlsx`**, не `merge_columns_3805.xlsx` в корне проекта.  
+> Файл в корне — устаревший (без разбивки на ADI/AIN/…); при сборке удаляется автоматически.
 
 ## Запуск
 
@@ -42,4 +45,4 @@ python merge_columns.py --all
 - `Справочник At Work&Education.xlsx`
 - `trade.xlsx`
 
-Перед запуском закрой выходной файл в Excel (например `merge_columns_3805.xlsx`).
+Перед запуском закрой выходные файлы в Excel (папка `merge_3805/`, не корень проекта).
