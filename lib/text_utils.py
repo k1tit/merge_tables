@@ -17,7 +17,7 @@ class TextNorm:
     @staticmethod
     def excel_text(val: Any) -> str:
         """Строка для Excel-колонок с форматом «текст» (ИНН, SDst и т.п.)."""
-        if val is None or (isinstance(val, float) and pd.isna(val)):
+        if val is None or pd.isna(val):
             return ""
         if isinstance(val, bool):
             return str(val)
@@ -48,7 +48,7 @@ class TextNorm:
     @staticmethod
     def key_part(val: Any) -> str:
         """Фрагмент для Key: строки как есть (036), числа без .0."""
-        if val is None or (isinstance(val, float) and pd.isna(val)):
+        if val is None or pd.isna(val):
             return ""
         if isinstance(val, str):
             return val.strip()
@@ -65,7 +65,7 @@ class TextNorm:
 
     @staticmethod
     def key_value(val: Any) -> str:
-        if val is None or (isinstance(val, float) and pd.isna(val)):
+        if val is None or pd.isna(val):
             return ""
         if isinstance(val, bool):
             return str(val)

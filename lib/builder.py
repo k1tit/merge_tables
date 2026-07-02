@@ -211,12 +211,16 @@ class ReportBuilder:
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
         t_before_write = time.perf_counter()
-        out_path = self._write_result(ctx, main_result, out_path)
+        out_path = self._write_result(
+            ctx, self._blank_column(main_result, trade_col), out_path
+        )
         t_after_main = time.perf_counter()
         split_source = result
         if split_cfg.get("require_trade_name_for_splits", True) and trade_col:
             split_source = self._filter_trade_name(result, trade_col)
-        self._write_cgrp_splits(ctx, split_source, trade_name_rows=trade_name_rows)
+        self._write_cgrp_splits(
+            ctx, split_source, trade_name_rows=trade_name_rows, trade_col=trade_col
+        )
         t_end = time.perf_counter()
         self._emit_final_timing(
             ctx,
@@ -229,6 +233,14 @@ class ReportBuilder:
             rows_main=len(main_result),
         )
         return out_path
+
+    @staticmethod
+    def _blank_column(df: pd.DataFrame, column: str) -> pd.DataFrame:
+        if not column or column not in df.columns:
+            return df
+        out = df.copy()
+        out[column] = ""
+        return out
 
     @staticmethod
     def _norm_split_value(val: Any) -> str:
@@ -400,6 +412,7 @@ class ReportBuilder:
         bucket: str | None = None,
         buckets: list[str] | None = None,
         text_columns: list[str] | None = None,
+        trade_col: str = "",
     ) -> Path:
         cfg = ctx.config
         text_columns = text_columns or [str(c) for c in (cfg.get("text_columns") or [])]
@@ -412,6 +425,8 @@ class ReportBuilder:
         else:
             part = result.iloc[0:0].copy()
             label = bucket_col
+
+        part = self._blank_column(part, trade_col)
 
         self._write(
             part,
@@ -437,6 +452,7 @@ class ReportBuilder:
         result: pd.DataFrame,
         *,
         trade_name_rows: pd.DataFrame | None = None,
+        trade_col: str = "",
     ) -> list[Path]:
         spec = ctx.config.get("cgrp_splits")
         if not spec:
@@ -449,6 +465,7 @@ class ReportBuilder:
             return []
 
         bucket_col = str(spec.get("bucket_column", "Check bucket")).strip()
+        trade_col = trade_col or str(spec.get("trade_name_column", "Trade Name")).strip()
         sorg = str(ctx.config.get("sorg") or ctx.sorg).strip()
         dir_template = str(spec.get("dir", "merge_{sorg}"))
         out_dir = ctx.base_dir / dir_template.format(sorg=sorg)
@@ -490,6 +507,7 @@ class ReportBuilder:
                     bucket_col,
                     bucket=bucket,
                     text_columns=text_columns,
+                    trade_col=trade_col,
                 )
             )
 
@@ -515,6 +533,7 @@ class ReportBuilder:
                     bucket_col,
                     buckets=buckets,
                     text_columns=text_columns,
+                    trade_col=trade_col,
                 )
             )
         return paths
@@ -659,7 +678,7 @@ class ReportBuilder:
                     f"Добавляем пустые колонки.",
                 )
                 for col in absent:
-                    result[col] = pd.NA
+                    result[col] = ""
             ordered = [c for c in col_order if c in result.columns]
             return result[ordered]
 
