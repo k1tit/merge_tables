@@ -1,8 +1,58 @@
+# =============================================================================
+# merge_columns — правила сборки отчёта
+# =============================================================================
+#
+# ПОРЯДОК СБОРКИ (lib/builder.py):
+#   1. sources[]       — последовательный left join к Base (порядок блоков важен)
+#   2. computed_columns — формулы Key, Customer Key (не из Excel)
+#   3. post_sources[]  — join после Key (справочник Ключ-Иерархия)
+#   4. checks[]        — колонки проверок true/false
+#
+# ПУТИ К ФАЙЛАМ (lib/paths.py, lib/sorg.py):
+#   - Base, CH6, ZW…: папка {sorg} (3801–3806), имена «3805 …» → «{sorg} …»
+#   - Справочники: reference_dir (по умолчанию references/) или корень проекта
+#   - При --all: отдельный xlsx на каждую папку; sorg/source_dir подставляется в config
+#
+# ПАРАМЕТРЫ ИСТОЧНИКА (блок sources / post_sources):
+#   merge_on.left/right — ключи join (Base ← файл)
+#   dedupe: true        — одна строка справа на ключ (lookup)
+#   dedupe: false       — fan-out: несколько строк справа → несколько строк в отчёте
+#   columns             — что взять; source = колонка Excel; from = склейка в коде
+#   optional: true      — нет колонки в Excel → пустая
+#   fallback            — если нет колонки, взять из другой
+#   overwrite_columns   — при совпадении имён перезаписать колонку Base
+#   reference_filter    — отфильтровать справочник ({sorg} → код SOrg)
+#   aggregate           — склеить несколько строк справа в одну (через запятую)
+#   merge_require_non_empty — очистить добавленные колонки, если ключ пустой
+#   enrich_from         — (редко) предварительный join внутри part перед основным
+#
+# ЛОГИКА В КОДЕ, НЕ ОПИСАННАЯ В БЛОКАХ НИЖЕ (lib/sources.py, lib/merger.py):
+#   • ZW / ZW base / ZW CH6 читаются из папки текущего {sorg} (как Base).
+#     Внутри файла в колонке SOrg. могут быть разные коды (3801…3806) — строки
+#     НЕ отфильтровываются по SOrg.; берётся весь файл целиком.
+#   • Join ZW к Base — по Customer/KUNNR или ZW/ZwPartner, без условия Base.SOrg.
+#   • После всех merge: _finalize_zw_rows() (lib/merger.py):
+#       - если ZW_SO есть, а ZW пуст → ZW := ZwPartner;
+#       - broadcast: ZW, ZW_SO, ZW_A7, ZW_CGrp, ZW_CH6, ZW_CH6_Name
+#         копируются на все строки того же Customer (без привязки к SOrg.);
+#       - удаляются «призраки»: строки с пустыми ZW и ZW_SO, если у Customer
+#         уже есть другая строка с заполненным ZW или ZW_SO.
+#   • Ключи справа с тем же именем, что в Base (Customer, SOrg.), не затирают Base
+#     (временный alias __merge_key__…).
+#   • Пустой ZW у Customer = нет записи в «{sorg} ZW.xlsx» (KUNNR); merge не виноват.
+#
+# МОДЕЛЬ ДАННЫХ ZW:
+#   Base.Customer     = sold-to (KUNNR)
+#   «{sorg} ZW»       KUNNR → KTONR в колонку ZW (партнёр ZW)
+#   «{sorg} ZW base»  Customer = партнёр (KTONR); ZwPartner; ZW_SO = SOrg. партнёра
+#   «{sorg} ZW CH6»   Customer = партнёр; join по ZW + ZW_SO
+# =============================================================================
+
 output_file: merge_columns_{sorg}.xlsx
-sorg: "3805"
+sorg: "3805"          # шаблон имён файлов в sources; реальная папка — source_dir / -s
 reference_dir: "references"
 
-at_work_a8_reference:
+at_work_a8_reference:  # справочник для формулы Key (At Work / Education); лист в xlsx
   file: "Справочник At Work&Education.xlsx"
   sheet: "At Work"
   output_sheet: "Справочник At Work&Education"
@@ -16,7 +66,7 @@ at_work_a8_reference:
     - "029"
     - "042"
     - "207"
-column_order:
+column_order:  # порядок колонок в итоговом Excel (остальные — в конец)
   - "SOrg."
   - "Customer"
   - "Name"
@@ -53,10 +103,11 @@ column_order:
   - "Key_CH6_Name"
   - "Check CH6 Customer & Key_CH6"
 
+# Вычисляются ПОСЛЕ sources[], ДО post_sources[] (lib/computed.py)
 computed_columns:
   - name: "Customer Key"
     type: customer_key
-    suffix: "380N"
+    suffix: "380N"   # суффикс в справочнике Ключ-Иерархия (не код SOrg 3805)
     standard_parts: ["Grp4", "CGrp", "A7"]
     at_work_parts: ["Grp4", "CGrp", "A7", "A8"]
     at_work_education:
@@ -69,8 +120,8 @@ computed_columns:
   - name: "Key"
     type: key
     separator: ""
-    formula: "Grp4 & CGrp & A7 & ZW_A7 & Indus."
-    at_work_formula: "Grp4 & CGrp & A7 & A8 & ZW_A7 & Indus."
+    formula: "Grp4 & CGrp & A7 & ZW_A7 & Indus."           # обычный Key
+    at_work_formula: "Grp4 & CGrp & A7 & A8 & ZW_A7 & Indus."  # CGrp P/Q или CH6_CGrp P
     omit_parts_when:
       column: "Grp4"
       values: ["DI"]
@@ -91,7 +142,7 @@ computed_columns:
       column: "CGrp"
       values: ["P", "Q"]
 
-text_columns:
+text_columns:       # читать как текст (lib/sources.py)
   - "Tax Number 1"
   - "A7"
   - "ZW_A7"
@@ -99,13 +150,13 @@ text_columns:
   - "PG"
   - "SDst"
 
-leading_zero_columns:
+leading_zero_columns:  # дополнить нулями слева при записи
   A7: 2
   ZW_A7: 2
   A8: 2
   PG: 2
 
-column_colors:
+column_colors:  # заливка заголовков в Excel (lib/builder.py)
   D7EACF:
     - "SOrg."
     - "Customer"
@@ -155,7 +206,7 @@ excel_autofit_max_width: 55
 
 verbose: true
 
-checks:
+checks:  # apply_when: если условие не выполнено → ok (часто true при пустом ZW)
   - name: "Check CH6_CGrp_KA"
     type: match_when_in_either
     columns: ["CGrp", "CH6_CGrp"]
@@ -167,7 +218,7 @@ checks:
     type: ch6_customer_vs_zw_ch6
     ch6_customer_column: "CH6"
     zw_ch6_column: "ZW_CH6"
-    apply_when:
+    apply_when:  # проверка только если все три поля непустые и Grp4=IN
       all_non_empty: ["CH6", "ZW_CH6", "ZW"]
       column_in:
         Grp4: ["IN"]
@@ -199,6 +250,7 @@ checks:
     ok: "true"
     fail: "false"
 
+# Join ПОСЛЕ computed_columns (нужны Customer Key и Key_CH6)
 post_sources:
   # Key_CH6: Customer Key → Ключ → колонка Иерархия (узел)
   - file: "Справочник Ключ-Иерархия"
@@ -222,7 +274,9 @@ post_sources:
       - name: "Key_CH6_Name"
         source: "Название узла"
 
+# Основная цепочка merge; первый блок — база, без merge_on
 sources:
+  # --- 1. База: все строки отчёта из папки {sorg} ---
   - file: "3805 Base.xlsx"
     sheet: 0
     columns:
@@ -243,8 +297,9 @@ sources:
       - "OrBlk"
       - name: "OrBlk2"
         source: "OrBlk2"
-        fallback: "OrBlk"
+        fallback: "OrBlk"   # нет OrBlk2 в файле → OrBlk
 
+  # --- 2. CH6 sold-to: иерархия по SOrg.+Customer ---
   - file: "3805 CH6"
     sheet: 0
     merge_on:
@@ -258,6 +313,7 @@ sources:
         source: "Text:Customer number of the higher-level"
         optional: true
 
+  # --- 3. CGrp по узлу CH6 (справочник) ---
   - file: "Справочник_CH6_CGrp.xlsx"
     sheet: 0
     merge_on:
@@ -268,6 +324,7 @@ sources:
       - name: "CH6_CGrp"
         source: "6th level_CGrp"
 
+  # --- 4. Trade Name → TN_* (фильтр по SO Trade Name = {sorg}) ---
   - file: "Справочник_CH6_CGrp.xlsx"
     sheet: 0
     merge_on:
@@ -298,43 +355,46 @@ sources:
       - name: "TN_CGrp"
         source: "6th level_CGrp"
 
+  # --- 5. ZW: sold-to → партнёр; файл из папки {sorg}; все строки файла (любой SOrg.) ---
   - file: "3805 ZW"
     sheet: 0
     merge_on:
-      left: ["Customer"]
-      right: ["KUNNR"]
-    dedupe: false
+      left: ["Customer"]   # Base sold-to
+      right: ["KUNNR"]    # sold-to в файле ZW
+    dedupe: false         # fan-out: у одного KUNNR может быть несколько KTONR
     columns:
       - name: "ZW"
-        source: "KTONR"
+        source: "KTONR"    # партнёр ZW
 
+  # --- 6. ZW base: атрибуты партнёра; join ZW=ZwPartner; fan-out по SOrg. → ZW_SO ---
   - file: "3805 ZW base"
     sheet: 0
     merge_on:
-      left: ["ZW"]
-      right: ["ZwPartner"]
-    dedupe: false
-    overwrite_columns: ["CGrp"]
+      left: ["ZW"]         # уже заполнен из шага 5
+      right: ["ZwPartner"] # Customer в ZW base = партнёр (KTONR)
+    dedupe: false         # несколько SOrg. на партнёра → отдельная строка на каждый
+    overwrite_columns: ["CGrp"]  # CGrp партнёра может перезаписать Base CGrp
     columns:
       - "CGrp"
       - name: "ZW_SO"
-        source: "SOrg."
+        source: "SOrg."    # SOrg. партнёра ZW (не Base.SOrg.)
       - name: "ZW_A7"
         source: "A7"
       - name: "ZW_CGrp"
-        from: ["CGrp"]
+        from: ["CGrp"]      # копия CGrp партнёра (inline computed)
       - name: "ZwPartner"
-        source: "Customer"
+        source: "Customer" # партнёр из файла; служебная, удаляется в _finalize_zw_rows
 
+  # --- 7. ZW CH6: иерархия партнёра; ключ ZW + ZW_SO ---
   - file: "3805 ZW CH6"
     sheet: 0
     merge_on:
       left: ["ZW", "ZW_SO"]
-      right: ["ZwPartner", "SOrg."]
+      right: ["ZwPartner", "SOrg."]  # SOrg. из ZW CH6 = ZW_SO после шага 6
     dedupe: false
     columns:
       - name: "ZwPartner"
-        source: "Customer"
+        source: "Customer"   # партнёр в файле ZW CH6
       - name: "ZW_CH6"
         source: "HgLvCust."
       - name: "ZW_CH6_Name"

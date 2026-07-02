@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -8,14 +7,11 @@ import pandas as pd
 
 from .column_resolver import ColumnResolver, ColumnSpecParser
 from .computed import ComputedColumnsApplier
-from .constants import DEFAULT_SORG_DIRS
 from .context import BuildContext
 from .log_sink import emit
 from .paths import PathResolver
 from .text_utils import TextNorm
 from .zw_link import load_zw_partner_map, sold_to_key
-
-_ZW_FILE_REST_RE = re.compile(r"^380[1-6]\s+(zw(?:\s+base|\s+ch6)?)$", re.IGNORECASE)
 
 
 class ExcelSourceReader:
@@ -29,53 +25,15 @@ class ExcelSourceReader:
 
     def _zw_partner_lookup(self) -> tuple[set[str], dict[str, str]]:
         if self._zw_kunnr is None:
-            frames: list[pd.DataFrame] = []
-            for code in DEFAULT_SORG_DIRS:
-                path = self.ctx.base_dir / code / f"{code} ZW.xlsx"
-                if not path.exists():
-                    continue
-                frames.append(
-                    pd.read_excel(
-                        path, usecols=["KUNNR", "KTONR"], engine=self.ctx.read_engine
-                    )
+            path = self.paths.resolve(f"{self.ctx.sorg_template} ZW")
+            if path.exists():
+                self._zw_kunnr, self._zw_ktonr_map = load_zw_partner_map(
+                    path, engine=self.ctx.read_engine
                 )
-            if not frames:
-                path = self.paths.resolve(f"{self.ctx.sorg_template} ZW")
-                if path.exists():
-                    self._zw_kunnr, self._zw_ktonr_map = load_zw_partner_map(
-                        path, engine=self.ctx.read_engine
-                    )
-                else:
-                    self._zw_kunnr = set()
-                    self._zw_ktonr_map = {}
             else:
-                zw = pd.concat(frames, ignore_index=True)
-                zw["KUNNR"] = zw["KUNNR"].map(TextNorm.key_value)
-                zw["KTONR"] = zw["KTONR"].map(TextNorm.key_value)
-                self._zw_kunnr = {k for k in zw["KUNNR"] if k}
+                self._zw_kunnr = set()
                 self._zw_ktonr_map = {}
-                for ktonr, kunnr in zip(zw["KTONR"], zw["KUNNR"], strict=False):
-                    if ktonr and ktonr not in self._zw_ktonr_map:
-                        self._zw_ktonr_map[ktonr] = kunnr
         return self._zw_kunnr, self._zw_ktonr_map
-
-    @staticmethod
-    def _zw_kind(rel: str) -> str | None:
-        match = _ZW_FILE_REST_RE.match(Path(rel).stem.strip())
-        return match.group(1).casefold() if match else None
-
-    def _all_sorg_paths(self, rel: str) -> list[Path]:
-        kind = self._zw_kind(rel)
-        if not kind:
-            return [self.paths.resolve(rel)]
-        paths: list[Path] = []
-        for code in DEFAULT_SORG_DIRS:
-            for ext in (".xlsx", ".xls"):
-                candidate = self.ctx.base_dir / code / f"{code} {kind}{ext}"
-                if candidate.exists():
-                    paths.append(candidate)
-                    break
-        return paths or [self.paths.resolve(rel)]
 
     @staticmethod
     def _is_zw_base_file(rel: str) -> bool:
@@ -120,13 +78,11 @@ class ExcelSourceReader:
         key_excel: dict[str, str] | None = None,
     ) -> pd.DataFrame:
         rel = spec["file"]
-        paths = self._all_sorg_paths(rel)
-        if len(paths) > 1 and self.ctx.verbose:
-            emit(
-                self.ctx,
-                f"  {rel!r}: объединение ZW из {len(paths)} папок SOrg "
-                f"(без фильтра по SOrg.)",
-            )
+        path = self.paths.resolve(rel)
+        if not path.exists():
+            hint = self.paths.lookup_hint(rel)
+            raise FileNotFoundError(f"Файл не найден: {path} ({hint})")
+
         sheet = spec.get("sheet", 0)
         plain_specs, inline_computed, column_order = ColumnSpecParser.parse(
             spec["columns"]
@@ -146,7 +102,7 @@ class ExcelSourceReader:
         out_names, excel_unique = ColumnSpecParser.needed(plain_specs, inline_computed)
 
         header = pd.read_excel(
-            paths[0], sheet_name=sheet, nrows=0, engine=self.ctx.read_engine
+            path, sheet_name=sheet, nrows=0, engine=self.ctx.read_engine
         )
         optional_excel = {p["excel"] for p in plain_specs if p.get("optional")}
         rename_for_usecols = ColumnResolver.resolve(
@@ -169,20 +125,7 @@ class ExcelSourceReader:
             if p["name"] in text_cols and p["excel"] in rename_for_usecols
         }
 
-        frames: list[pd.DataFrame] = []
-        for path in paths:
-            frames.append(
-                self._read_subset(path, sheet, usecols, dtype=dtype or None)
-            )
-        df = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
-        if len(frames) > 1:
-            dedupe_cols = [
-                c
-                for c in ("KUNNR", "KTONR", "Customer", "SOrg.")
-                if c in df.columns
-            ]
-            if len(dedupe_cols) >= 2:
-                df = df.drop_duplicates(subset=dedupe_cols, keep="first")
+        df = self._read_subset(path, sheet, usecols, dtype=dtype or None)
         for col in list(df.columns):
             if TextNorm.is_id_column(col):
                 df[col] = df[col].map(TextNorm.key_value)
