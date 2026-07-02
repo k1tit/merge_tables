@@ -126,23 +126,6 @@ class ExcelSourceReader:
         }
 
         df = self._read_subset(path, sheet, usecols, dtype=dtype or None)
-        read_dedupe = spec.get("read_dedupe")
-        if read_dedupe:
-            dedupe_keys = (
-                [str(k) for k in read_dedupe]
-                if isinstance(read_dedupe, list)
-                else [str(read_dedupe)]
-            )
-            subset = [k for k in dedupe_keys if k in df.columns]
-            if subset:
-                before = len(df)
-                df = df.drop_duplicates(subset=subset, keep="first")
-                removed = before - len(df)
-                if removed and self.ctx.verbose:
-                    emit(
-                        self.ctx,
-                        f"  {rel!r}: удалено {removed} дублей по {subset}",
-                    )
         for col in list(df.columns):
             if TextNorm.is_id_column(col):
                 df[col] = df[col].map(TextNorm.key_value)
@@ -228,6 +211,15 @@ class ExcelSourceReader:
             cols = [c for c in column_order if c in out.columns]
             rest = [c for c in out.columns if c not in cols]
             out = out[cols + rest]
+        if spec.get("read_dedupe"):
+            before = len(out)
+            out = out.drop_duplicates(keep="first")
+            removed = before - len(out)
+            if removed and self.ctx.verbose:
+                emit(
+                    self.ctx,
+                    f"  {rel!r}: удалено {removed} полных дублей строк",
+                )
         return out
 
     def _read_subset(
