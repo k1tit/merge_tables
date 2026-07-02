@@ -215,11 +215,8 @@ class ReportBuilder:
             ctx, self._blank_column(main_result, trade_col), out_path
         )
         t_after_main = time.perf_counter()
-        split_source = result
-        if split_cfg.get("require_trade_name_for_splits", True) and trade_col:
-            split_source = self._filter_trade_name(result, trade_col)
         self._write_cgrp_splits(
-            ctx, split_source, trade_name_rows=trade_name_rows, trade_col=trade_col
+            ctx, result, trade_name_rows=trade_name_rows, trade_col=trade_col
         )
         t_end = time.perf_counter()
         self._emit_final_timing(
