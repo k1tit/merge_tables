@@ -297,32 +297,19 @@ checks:
     ok: "true"
     fail: "false"
 
-# Join ПОСЛЕ computed_columns (нужны Key и Customer Key)
+# Join ПОСЛЕ computed_columns (нужен Key отчёта)
 post_sources:
-  # Справочник Ключ-Иерархия: Customer Key → Ключ → Узел в Key_CH6
-  - file: "Справочник Ключ-Иерархия"
-    sheet: 0
-    merge_on:
-      left: ["Customer Key"]
-      right: ["Ключ"]
-    dedupe: true
-    columns:
-      - name: "Key_CH6"
-        source: "Узел"           # в Excel: «Иерархия» или «Узел»
-
-  # Доп. join по Key отчёта (если в справочнике ключ в формате Key, а не Customer Key)
+  # Справочник Ключ-Иерархия: Key отчёта → Key/Ключ → Узел в Key_CH6
+  # НЕ Customer Key (DIA119380N) — это другой ключ, даёт неверный узел (напр. 38511201 вместо 38515206)
   - file: "Справочник Ключ-Иерархия"
     sheet: 0
     merge_on:
       left: ["Key"]
       right: ["Key"]
-    key_excel:
-      Key: "Ключ"
     dedupe: true
-    overwrite_columns: ["Key_CH6"]
     columns:
       - name: "Key_CH6"
-        source: "Узел"
+        source: "Узел"           # в Excel: «Узел» или «Иерархия»
 
   # Справочник_CH6: Key_CH6 = 6th level → 6th level_Name, SO
   - file: "Справочник_CH6 SO"

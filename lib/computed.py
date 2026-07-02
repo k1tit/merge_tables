@@ -142,13 +142,12 @@ class ComputedColumnsApplier:
         standard | at_work | invalid
 
         - at_work (с A8): CH6_CGrp=P, CGrp∈{P,Q}, A8 в справочнике At Work&Education
-        - invalid: CH6_CGrp=P, но CGrp ∉ {P, Q}
-        - standard: без A8 (в т.ч. At w/Ed, но A8 не в справочнике)
+        - standard: CH6_CGrp≠P, или CGrp∉{P,Q} при CH6_CGrp=P (обычный Key без A8)
         """
         if not cls._is_at_work_edu(row, spec):
             return "standard"
         if not cls._is_business_pq(row, spec):
-            return "invalid"
+            return "standard"
         if cls._a8_in_reference(row, spec, a8_ref_values):
             return "at_work"
         return "standard"

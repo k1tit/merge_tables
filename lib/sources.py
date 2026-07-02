@@ -142,10 +142,9 @@ class ExcelSourceReader:
 
         rename_map = {}
         for p in plain_specs:
-            if p["name"] == p["excel"]:
-                continue
             actual = rename_for_usecols.get(p["excel"], p["excel"])
-            rename_map[actual] = p["name"]
+            if actual in df.columns and actual != p["name"]:
+                rename_map[actual] = p["name"]
         if rename_map:
             df = df.rename(columns=rename_map)
 
