@@ -57,9 +57,9 @@ output_file: merge_columns_{sorg}.xlsx
 sorg: "3805"          # шаблон имён файлов в sources; реальная папка — source_dir / -s
 reference_dir: "references"
 
-# merge_{sorg}/Trade Name.xlsx — Trade Name заполнен, не в bucket ADI/AIN/BDI/BIN/QDI/QIN
+# merge_{sorg}/Trade Name.xlsx — все строки с заполненным Trade Name (в т.ч. QDI/QIN)
 # merge_{sorg}/merge_columns_{sorg}.xlsx — остаток; колонка Trade Name пустая
-# bucket-файлы ADI/AIN/BDI/BIN/QDI QIN — все строки с Check bucket; Trade Name пустой
+# bucket-файлы ADI/AIN/BDI/BIN/QDI QIN — Check bucket и Trade Name пустой
 cgrp_splits:
   dir: "merge_{sorg}"
   bucket_column: "Check bucket"

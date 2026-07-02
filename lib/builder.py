@@ -201,9 +201,7 @@ class ReportBuilder:
         trade_col = str(split_cfg.get("trade_name_column", "Trade Name")).strip()
         all_buckets = self._all_split_buckets(split_cfg)
         trade_mask = self._trade_name_mask(result, trade_col)
-        trade_name_rows = self._filter_trade_name_not_in_buckets(
-            result, trade_col, bucket_col, all_buckets
-        )
+        trade_name_rows = self._filter_trade_name_split(result, trade_col)
         split_rows = self._split_row_mask(
             result, trade_col, bucket_col, all_buckets, split_cfg
         )
@@ -286,6 +284,12 @@ class ReportBuilder:
         series = df[bucket_col].map(self._norm_split_value)
         return series.isin(keys)
 
+    @staticmethod
+    def _filter_trade_name_split(df: pd.DataFrame, trade_col: str) -> pd.DataFrame:
+        """Trade Name.xlsx — все строки с заполненным Trade Name."""
+        trade_mask = ReportBuilder._trade_name_mask(df, trade_col)
+        return df.loc[trade_mask].copy()
+
     def _filter_trade_name_not_in_buckets(
         self,
         df: pd.DataFrame,
@@ -309,13 +313,14 @@ class ReportBuilder:
     ) -> pd.Series:
         in_bucket = self._bucket_mask(df, bucket_col, buckets)
         trade_mask = self._trade_name_mask(df, trade_col)
+        # Bucket-файлы: только bucket без Trade Name (QDI/QIN с TN → Trade Name.xlsx).
+        bucket_split = in_bucket & ~trade_mask
         trade_name_file = str(split_cfg.get("trade_name_file", "Trade Name.xlsx")).strip()
         if trade_name_file:
-            trade_name_split = trade_mask & ~in_bucket
+            trade_name_split = trade_mask
         else:
             trade_name_split = pd.Series(False, index=df.index)
-        # Из основного файла убираем все строки с bucket (ADI/AIN/…), не только с Trade Name.
-        return in_bucket | trade_name_split
+        return bucket_split | trade_name_split
 
     @staticmethod
     def _bucket_from_item(item: Any) -> str:
@@ -443,6 +448,9 @@ class ReportBuilder:
             part = result.iloc[0:0].copy()
             label = bucket_col
 
+        if trade_col:
+            part = part.loc[~self._trade_name_mask(part, trade_col)].copy()
+
         part = self._blank_column(part, trade_col)
 
         self._write(
@@ -562,7 +570,7 @@ class ReportBuilder:
                     ctx,
                     trade_name_rows,
                     out_dir / trade_name_file,
-                    label=f"{spec.get('trade_name_column', 'Trade Name')} заполнен, не в bucket",
+                    label=f"{spec.get('trade_name_column', 'Trade Name')} заполнен",
                     text_columns=text_columns,
                 )
             )

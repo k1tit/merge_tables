@@ -19,9 +19,9 @@ python merge_columns.py -s 3805 --no-menu
 ```
 
   - `merge_3805/merge_columns_3805.xlsx` — остаток: всё, что не попало в split-файлы ниже (в т.ч. без Trade Name)
-  - `merge_3805/Trade Name.xlsx` — Trade Name заполнен, не в bucket ADI/AIN/BDI/BIN/QDI/QIN
-  - `merge_3805/ADI.xlsx`, `AIN.xlsx`, `BDI.xlsx`, `BIN.xlsx` — по **Check bucket** (CGrp+Grp4)
-  - `merge_3805/QDI QIN.xlsx` — оба bucket **QDI** и **QIN** в одном файле
+  - `merge_3805/Trade Name.xlsx` — все строки с заполненным Trade Name (включая QDI/QIN)
+  - `merge_3805/ADI.xlsx`, `AIN.xlsx`, `BDI.xlsx`, `BIN.xlsx` — по **Check bucket**, Trade Name пустой
+  - `merge_3805/QDI QIN.xlsx` — bucket **QDI** / **QIN**, Trade Name пустой
 
 ### Все папки сразу (3801–3806)
 
