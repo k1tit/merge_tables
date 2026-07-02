@@ -138,6 +138,12 @@ computed_columns:
     suffix: "380N"   # суффикс в справочнике Ключ-Иерархия (не код SOrg 3805)
     standard_parts: ["Grp4", "CGrp", "A7"]
     at_work_parts: ["Grp4", "CGrp", "A7", "A8"]
+    # Grp4=IN: в справочнике Ключ = Grp4+CGrp+A7+ZW_A7+380N (INA104235380N)
+    include_parts_when:
+      - column: "Grp4"
+        values: ["IN"]
+        parts: ["ZW_A7"]
+        insert_after: "A7"
     at_work_education:
       reason_column: "CH6_CGrp"
       reason_values: ["P"]
@@ -289,6 +295,7 @@ checks:
     left_column: "CH6"
     right_column: "Key_CH6"
     dash_match: true
+    empty: "пусто"
     ok: "true"
     fail: "false"
 
@@ -296,6 +303,7 @@ checks:
     type: compare_match_empty
     left_column: "SOrg."
     right_column: "Key_CH6_SO"
+    empty: "пусто"
     ok: "true"
     fail: "false"
 

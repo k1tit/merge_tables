@@ -293,6 +293,10 @@ class ComputedColumnsApplier:
                 result.append("")
                 continue
             parts = at_work if mode == "at_work" else standard
+            parts = cls._omit_parts_for_row(row, parts, spec)
+            parts = cls._include_parts_for_row(
+                row, parts, spec, a8_ref_values=a8_ref_values
+            )
             body = "".join(TextNorm.compact_key_part(row[p]) for p in parts)
             result.append(f"{body}{suffix}" if body else "")
         return pd.Series(result, index=df.index, dtype=object)
