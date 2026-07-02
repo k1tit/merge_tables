@@ -121,7 +121,7 @@ class TextNorm:
 
     @staticmethod
     def split_aggregated(val: Any, *, separator: str = ", ") -> list[str]:
-        if val is None or (isinstance(val, float) and pd.isna(val)):
+        if val is None or pd.isna(val):
             return []
         text = str(val).strip()
         if not text:

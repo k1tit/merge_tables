@@ -172,12 +172,21 @@ class CheckEngine:
                 raise KeyError(f"Проверка {spec.get('name')!r}: нет колонки {col!r}.")
 
         trigger = {TextNorm.name(v) for v in spec.get("values", [])}
+        empty_label = str(spec.get("empty", "пусто"))
         ok_label = str(spec.get("ok", "true"))
         fail_label = str(spec.get("fail", "false"))
 
         a = df[left].fillna("").astype(str).str.strip().str.casefold()
         b = df[right].fillna("").astype(str).str.strip().str.casefold()
+        a_empty = a.eq("")
+        b_empty = b.eq("")
+        one_empty = a_empty ^ b_empty
+        both_empty = a_empty & b_empty
+
         applies = a.isin(trigger) | b.isin(trigger)
         result = pd.Series(ok_label, index=df.index, dtype=object)
-        result.loc[applies & (a != b)] = fail_label
+        empty_out = self._empty_result(empty_label)
+        result.loc[one_empty | both_empty] = empty_out
+        filled = ~a_empty & ~b_empty
+        result.loc[applies & filled & (a != b)] = fail_label
         return result

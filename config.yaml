@@ -272,6 +272,7 @@ checks:
     right_column: "TN_CH6"
     list_compare: true
     separator: ", "
+    empty: "пусто"
     ok: "true"
     fail: "false"
 
@@ -279,6 +280,7 @@ checks:
     type: match_when_in_either
     columns: ["CGrp", "TN_CGrp"]
     values: ["S", "F", "K", "Q"]
+    empty: "пусто"
     ok: "true"
     fail: "false"
 
@@ -297,15 +299,14 @@ checks:
     ok: "true"
     fail: "false"
 
-# Join ПОСЛЕ computed_columns (нужен Key отчёта)
+# Join ПОСЛЕ computed_columns (нужен Customer Key)
 post_sources:
-  # Справочник Ключ-Иерархия: Key отчёта → Key/Ключ → Узел в Key_CH6
-  # НЕ Customer Key (DIA119380N) — это другой ключ, даёт неверный узел (напр. 38511201 вместо 38515206)
+  # Справочник Ключ-Иерархия: Customer Key (Grp4+CGrp+A7+380N) → колонка «Ключ» → Узел
   - file: "Справочник Ключ-Иерархия"
     sheet: 0
     merge_on:
-      left: ["Key"]
-      right: ["Key"]
+      left: ["Customer Key"]
+      right: ["Ключ"]
     dedupe: true
     columns:
       - name: "Key_CH6"
