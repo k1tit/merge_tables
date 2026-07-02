@@ -15,7 +15,10 @@ python merge_columns.py
 python merge_columns.py -s 3805 --no-menu
 ```
 
-Результат: `merge_columns_3805.xlsx`
+  - `merge_3805/merge_columns_3805.xlsx` — остаток: всё, что не попало в split-файлы ниже (в т.ч. без Trade Name)
+  - `merge_3805/Trade Name.xlsx` — Trade Name заполнен, не в bucket ADI/AIN/BDI/BIN/QDI/QIN
+  - `merge_3805/ADI.xlsx`, `AIN.xlsx`, `BDI.xlsx`, `BIN.xlsx` — по **Check bucket** (CGrp+Grp4)
+  - `merge_3805/QDI QIN.xlsx` — оба bucket **QDI** и **QIN** в одном файле
 
 ### Все папки сразу (3801–3806)
 
@@ -23,7 +26,7 @@ python merge_columns.py -s 3805 --no-menu
 python merge_columns.py --all
 ```
 
-Результат: **`merge_columns_3801.xlsx` … `merge_columns_3806.xlsx`** — отдельный файл на каждую папку SOrg (только существующие с данными).
+Результат: **`merge_3801/` … `merge_3806/`** — в каждой папке основной файл и bucket-файлы.
 
 В интерактивном меню (`python merge_columns.py`): пункт **`a`** — сборка всех папок.
 

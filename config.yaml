@@ -7,7 +7,10 @@
 #   2. computed_columns — формулы Key, Customer Key (не из Excel)
 #   3. post_sources[]  — join после Key (справочник Ключ-Иерархия)
 #   4. checks[]        — колонки проверок true/false
-#   5. cgrp_splits     — файлы в merge_{sorg}/ по колонке Check bucket (CGrp&Grp4)
+#   5. cgrp_splits     — merge_{sorg}/:
+#        Trade Name.xlsx — строки с заполненным Trade Name (не в bucket);
+#        ADI/AIN/BDI/BIN, QDI+QIN — bucket-файлы;
+#        основной файл — всё, что не попало в Trade Name / ADI / AIN / BDI / BIN / QDI QIN
 #
 # ПУТИ К ФАЙЛАМ (lib/paths.py, lib/sorg.py):
 #   - Base, CH6, ZW…: папка {sorg} (3801–3806), имена «3805 …» → «{sorg} …»
@@ -54,15 +57,23 @@ output_file: merge_columns_{sorg}.xlsx
 sorg: "3805"          # шаблон имён файлов в sources; реальная папка — source_dir / -s
 reference_dir: "references"
 
-# Дополнительно к merge_columns_{sorg}.xlsx — разбивка по Check bucket в merge_{sorg}/
+# merge_{sorg}/Trade Name.xlsx — Trade Name заполнен, не в bucket ADI/AIN/BDI/BIN/QDI/QIN
+# merge_{sorg}/merge_columns_{sorg}.xlsx — остаток (все строки, не попавшие в файлы выше)
+# + merge_{sorg}/ADI.xlsx, AIN.xlsx, BDI.xlsx, BIN.xlsx, QDI QIN.xlsx
 cgrp_splits:
   dir: "merge_{sorg}"
   bucket_column: "Check bucket"
+  trade_name_column: "Trade Name"
+  trade_name_file: "Trade Name.xlsx"
+  require_trade_name_for_splits: true
   files:
     - bucket: "ADI"
     - bucket: "AIN"
     - bucket: "BDI"
     - bucket: "BIN"
+  groups:
+    - name: "QDI QIN.xlsx"
+      buckets: ["QDI", "QIN"]
 
 at_work_a8_reference:  # справочник для формулы Key (At Work / Education); лист в xlsx
   file: "Справочник At Work&Education.xlsx"

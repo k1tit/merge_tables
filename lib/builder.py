@@ -40,10 +40,16 @@ def excel_read_engine(preferred: str | None) -> str:
 
 
 def resolve_output_path(ctx: BuildContext) -> Path:
-    """Имя отчёта: output_file из config, плейсхолдер {sorg} → 3801–3806."""
+    """Имя отчёта: output_file в merge_{sorg}/ при cgrp_splits, иначе в корне."""
     template = str(ctx.config.get("output_file", "merge_columns_{sorg}.xlsx"))
     sorg = str(ctx.config.get("sorg") or ctx.sorg).strip()
-    return ctx.base_dir / template.format(sorg=sorg)
+    filename = Path(template.format(sorg=sorg)).name
+    split_cfg = ctx.config.get("cgrp_splits") or {}
+    dir_template = str(split_cfg.get("dir", "")).strip()
+    if dir_template:
+        out_dir = ctx.base_dir / dir_template.format(sorg=sorg)
+        return out_dir / filename
+    return ctx.base_dir / filename
 
 
 class ReportBuilder:
@@ -170,6 +176,18 @@ class ReportBuilder:
                 )
 
         result = self._build_dataframe(ctx)
+        split_cfg = ctx.config.get("cgrp_splits") or {}
+        bucket_col = str(split_cfg.get("bucket_column", "Check bucket")).strip()
+        trade_col = str(split_cfg.get("trade_name_column", "Trade Name")).strip()
+        all_buckets = self._all_split_buckets(split_cfg)
+        trade_mask = self._trade_name_mask(result, trade_col)
+        trade_name_rows = self._filter_trade_name_not_in_buckets(
+            result, trade_col, bucket_col, all_buckets
+        )
+        split_rows = self._split_row_mask(
+            result, trade_col, bucket_col, all_buckets, split_cfg
+        )
+        main_result = result.loc[~split_rows].copy()
 
         if ctx.verbose:
             emit(
@@ -177,14 +195,162 @@ class ReportBuilder:
                 f"  merge+проверки: {time.perf_counter() - t1:.1f} с, "
                 f"строк: {len(result)}",
             )
+            if trade_col and trade_mask.any():
+                emit(
+                    ctx,
+                    f"  {trade_col!r}: {int(trade_mask.sum())} строк из {len(result)}",
+                )
+            if all_buckets:
+                emit(
+                    ctx,
+                    f"  основной файл: {len(main_result)} строк "
+                    f"(без Trade Name / bucket {', '.join(all_buckets)})",
+                )
 
-        out_path = self._write_result(ctx, result, out_path, t0)
-        self._write_cgrp_splits(ctx, result)
+        t_merge_end = time.perf_counter()
+
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        t_before_write = time.perf_counter()
+        out_path = self._write_result(ctx, main_result, out_path)
+        t_after_main = time.perf_counter()
+        split_source = result
+        if split_cfg.get("require_trade_name_for_splits", True) and trade_col:
+            split_source = self._filter_trade_name(result, trade_col)
+        self._write_cgrp_splits(ctx, split_source, trade_name_rows=trade_name_rows)
+        t_end = time.perf_counter()
+        self._emit_final_timing(
+            ctx,
+            merge_s=t_merge_end - t1,
+            write_s=t_after_main - t_before_write,
+            split_s=t_end - t_after_main,
+            total_s=t_end - t0,
+            rows_total=len(result),
+            rows_split=int(split_rows.sum()),
+            rows_main=len(main_result),
+        )
         return out_path
 
     @staticmethod
     def _norm_split_value(val: Any) -> str:
         return TextNorm.key_value(val).upper()
+
+    @staticmethod
+    def _trade_name_mask(df: pd.DataFrame, column: str) -> pd.Series:
+        if column not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df[column].fillna("").astype(str).str.strip().ne("")
+
+    @staticmethod
+    def _filter_trade_name(df: pd.DataFrame, column: str) -> pd.DataFrame:
+        mask = ReportBuilder._trade_name_mask(df, column)
+        return df.loc[mask].copy()
+
+    def _bucket_mask(
+        self,
+        df: pd.DataFrame,
+        bucket_col: str,
+        buckets: list[str],
+    ) -> pd.Series:
+        if not buckets or bucket_col not in df.columns:
+            return pd.Series(False, index=df.index)
+        keys = {self._norm_split_value(b) for b in buckets}
+        series = df[bucket_col].map(self._norm_split_value)
+        return series.isin(keys)
+
+    def _filter_trade_name_not_in_buckets(
+        self,
+        df: pd.DataFrame,
+        trade_col: str,
+        bucket_col: str,
+        buckets: list[str],
+    ) -> pd.DataFrame:
+        trade_mask = self._trade_name_mask(df, trade_col)
+        if not buckets or bucket_col not in df.columns:
+            return df.loc[trade_mask].copy()
+        in_bucket = self._bucket_mask(df, bucket_col, buckets)
+        return df.loc[trade_mask & ~in_bucket].copy()
+
+    def _split_row_mask(
+        self,
+        df: pd.DataFrame,
+        trade_col: str,
+        bucket_col: str,
+        buckets: list[str],
+        split_cfg: dict[str, Any],
+    ) -> pd.Series:
+        in_bucket = self._bucket_mask(df, bucket_col, buckets)
+        trade_mask = self._trade_name_mask(df, trade_col)
+        trade_name_file = str(split_cfg.get("trade_name_file", "Trade Name.xlsx")).strip()
+        if trade_name_file:
+            trade_name_split = trade_mask & ~in_bucket
+        else:
+            trade_name_split = pd.Series(False, index=df.index)
+        if split_cfg.get("require_trade_name_for_splits", True):
+            bucket_split = trade_mask & in_bucket
+        else:
+            bucket_split = in_bucket
+        return bucket_split | trade_name_split
+
+    @staticmethod
+    def _bucket_from_item(item: Any) -> str:
+        if isinstance(item, str):
+            return item.strip().upper()
+        bucket = str(item.get("bucket", "")).strip().upper()
+        if not bucket and item.get("cgrp") and item.get("grp4"):
+            bucket = (
+                ReportBuilder._norm_split_value(item["cgrp"])
+                + ReportBuilder._norm_split_value(item["grp4"])
+            )
+        return bucket
+
+    @staticmethod
+    def _all_split_buckets(spec: dict[str, Any] | None) -> list[str]:
+        if not spec:
+            return []
+        buckets: list[str] = []
+        for item in spec.get("files") or spec.get("buckets") or []:
+            bucket = ReportBuilder._bucket_from_item(item)
+            if bucket:
+                buckets.append(bucket)
+        for group in spec.get("groups") or []:
+            if isinstance(group, str):
+                b = group.strip().upper()
+                if b:
+                    buckets.append(b)
+                continue
+            for raw in group.get("buckets") or []:
+                bucket = str(raw).strip().upper()
+                if bucket:
+                    buckets.append(bucket)
+        return list(dict.fromkeys(buckets))
+
+    @staticmethod
+    def _configured_buckets(spec: dict[str, Any] | None) -> list[str]:
+        return ReportBuilder._all_split_buckets(spec)
+
+    def _exclude_buckets(
+        self,
+        df: pd.DataFrame,
+        bucket_col: str,
+        buckets: list[str],
+    ) -> pd.DataFrame:
+        if not buckets or bucket_col not in df.columns:
+            return df
+        keys = {self._norm_split_value(b) for b in buckets}
+        series = df[bucket_col].map(self._norm_split_value)
+        return df.loc[~series.isin(keys)].copy()
+
+    def _filter_buckets_in(
+        self,
+        df: pd.DataFrame,
+        bucket_col: str,
+        buckets: list[str],
+    ) -> pd.DataFrame:
+        if not buckets or bucket_col not in df.columns:
+            return df.iloc[0:0].copy()
+        keys = {self._norm_split_value(b) for b in buckets}
+        series = df[bucket_col].map(self._norm_split_value)
+        return df.loc[series.isin(keys)].copy()
 
     def _filter_bucket_split(
         self, df: pd.DataFrame, bucket_col: str, bucket: str
@@ -198,15 +364,91 @@ class ReportBuilder:
         series = df[bucket_col].map(self._norm_split_value)
         return df.loc[series.eq(want)].copy()
 
+    def _write_split_frame(
+        self,
+        ctx: BuildContext,
+        part: pd.DataFrame,
+        out_path: Path,
+        *,
+        label: str,
+        text_columns: list[str] | None = None,
+    ) -> Path:
+        cfg = ctx.config
+        text_columns = text_columns or [str(c) for c in (cfg.get("text_columns") or [])]
+        self._write(
+            part,
+            out_path,
+            ctx.write_engine,
+            text_columns=text_columns,
+            leading_zero_columns=cfg.get("leading_zero_columns"),
+            column_colors=cfg.get("column_colors"),
+            autofit_columns=bool(cfg.get("excel_autofit_columns", True)),
+            autofit_sample_rows=int(cfg.get("excel_autofit_sample_rows", 1000)),
+            autofit_max_width=int(cfg.get("excel_autofit_max_width", 55)),
+        )
+        if ctx.verbose:
+            emit(
+                ctx,
+                f"    {out_path.parent.name}/{out_path.name}: {len(part)} строк ({label})",
+            )
+        return out_path
+
+    def _write_split_part(
+        self,
+        ctx: BuildContext,
+        result: pd.DataFrame,
+        out_path: Path,
+        bucket_col: str,
+        *,
+        bucket: str | None = None,
+        buckets: list[str] | None = None,
+        text_columns: list[str] | None = None,
+    ) -> Path:
+        cfg = ctx.config
+        text_columns = text_columns or [str(c) for c in (cfg.get("text_columns") or [])]
+        if bucket is not None:
+            part = self._filter_bucket_split(result, bucket_col, bucket)
+            label = f"{bucket_col}={bucket}"
+        elif buckets:
+            part = self._filter_buckets_in(result, bucket_col, buckets)
+            label = f"{bucket_col} in {', '.join(buckets)}"
+        else:
+            part = result.iloc[0:0].copy()
+            label = bucket_col
+
+        self._write(
+            part,
+            out_path,
+            ctx.write_engine,
+            text_columns=text_columns,
+            leading_zero_columns=cfg.get("leading_zero_columns"),
+            column_colors=cfg.get("column_colors"),
+            autofit_columns=bool(cfg.get("excel_autofit_columns", True)),
+            autofit_sample_rows=int(cfg.get("excel_autofit_sample_rows", 1000)),
+            autofit_max_width=int(cfg.get("excel_autofit_max_width", 55)),
+        )
+        if ctx.verbose:
+            emit(
+                ctx,
+                f"    {out_path.parent.name}/{out_path.name}: {len(part)} строк ({label})",
+            )
+        return out_path
+
     def _write_cgrp_splits(
-        self, ctx: BuildContext, result: pd.DataFrame
+        self,
+        ctx: BuildContext,
+        result: pd.DataFrame,
+        *,
+        trade_name_rows: pd.DataFrame | None = None,
     ) -> list[Path]:
         spec = ctx.config.get("cgrp_splits")
         if not spec:
             return []
 
         files = spec.get("files") or spec.get("buckets") or []
-        if not files:
+        groups = spec.get("groups") or []
+        trade_name_file = str(spec.get("trade_name_file", "Trade Name.xlsx")).strip()
+        if not files and not groups and not trade_name_file:
             return []
 
         bucket_col = str(spec.get("bucket_column", "Check bucket")).strip()
@@ -220,53 +462,98 @@ class ReportBuilder:
         paths: list[Path] = []
 
         if ctx.verbose:
-            emit(ctx, f"  разбивка по {bucket_col!r} → {out_dir.name}/")
+            emit(ctx, f"  bucket-файлы по {bucket_col!r} → {out_dir.name}/")
+
+        if trade_name_file and trade_name_rows is not None:
+            paths.append(
+                self._write_split_frame(
+                    ctx,
+                    trade_name_rows,
+                    out_dir / trade_name_file,
+                    label=f"{spec.get('trade_name_column', 'Trade Name')} заполнен, не в bucket",
+                    text_columns=text_columns,
+                )
+            )
 
         for item in files:
+            bucket = self._bucket_from_item(item)
+            if not bucket:
+                continue
             if isinstance(item, str):
-                bucket = item.strip()
                 name = f"{bucket}.xlsx"
             else:
-                bucket = str(item.get("bucket", "")).strip()
-                if not bucket and item.get("cgrp") and item.get("grp4"):
-                    bucket = (
-                        self._norm_split_value(item["cgrp"])
-                        + self._norm_split_value(item["grp4"])
-                    )
                 name = str(
                     item.get("name") or item.get("file") or f"{bucket}.xlsx"
                 ).strip()
-            if not bucket:
-                continue
-
-            part = self._filter_bucket_split(result, bucket_col, bucket)
-            out_path = out_dir / name
-            self._write(
-                part,
-                out_path,
-                ctx.write_engine,
-                text_columns=text_columns,
-                leading_zero_columns=cfg.get("leading_zero_columns"),
-                column_colors=cfg.get("column_colors"),
-                autofit_columns=bool(cfg.get("excel_autofit_columns", True)),
-                autofit_sample_rows=int(cfg.get("excel_autofit_sample_rows", 1000)),
-                autofit_max_width=int(cfg.get("excel_autofit_max_width", 55)),
-            )
-            paths.append(out_path)
-            if ctx.verbose:
-                emit(
+            paths.append(
+                self._write_split_part(
                     ctx,
-                    f"    {out_dir.name}/{name}: {len(part)} строк "
-                    f"({bucket_col}={bucket})",
+                    result,
+                    out_dir / name,
+                    bucket_col,
+                    bucket=bucket,
+                    text_columns=text_columns,
                 )
+            )
+
+        for group in groups:
+            if isinstance(group, str):
+                buckets = [group.strip().upper()]
+                name = f"{group.strip().upper()}.xlsx"
+            else:
+                buckets = [
+                    str(b).strip().upper()
+                    for b in (group.get("buckets") or [])
+                    if str(b).strip()
+                ]
+                if not buckets:
+                    continue
+                default_name = " ".join(buckets) + ".xlsx"
+                name = str(group.get("name") or group.get("file") or default_name).strip()
+            paths.append(
+                self._write_split_part(
+                    ctx,
+                    result,
+                    out_dir / name,
+                    bucket_col,
+                    buckets=buckets,
+                    text_columns=text_columns,
+                )
+            )
         return paths
+
+    @staticmethod
+    def _emit_final_timing(
+        ctx: BuildContext,
+        *,
+        merge_s: float,
+        write_s: float,
+        split_s: float,
+        total_s: float,
+        rows_total: int,
+        rows_split: int | None = None,
+        rows_main: int,
+    ) -> None:
+        parts = [f"merge {merge_s:.1f} с", f"запись {write_s:.1f} с"]
+        if split_s >= 0.05:
+            parts.append(f"разбивка {split_s:.1f} с")
+        if rows_split is not None and rows_split > 0:
+            rows_note = f"основной {rows_main}, в split-файлы {rows_split}"
+        elif rows_main != rows_total:
+            rows_note = f"строк {rows_main} (+ split {rows_total - rows_main})"
+        else:
+            rows_note = f"строк {rows_total}"
+        emit(
+            ctx,
+            f"  формирование таблицы: {total_s:.1f} с "
+            f"({', '.join(parts)}; {rows_note})",
+        )
 
     def _write_result(
         self,
         ctx: BuildContext,
         result: pd.DataFrame,
         out_path: Path,
-        t0: float,
         *,
         data_sheets: list[tuple[str, pd.DataFrame]] | None = None,
     ) -> Path:
@@ -301,7 +588,7 @@ class ReportBuilder:
         )
         if ctx.verbose:
             emit(ctx, f"  запись: {time.perf_counter() - t2:.1f} с")
-        self._print_summary(result, checks, ctx, t0)
+        self._print_summary(result, checks, ctx)
         return out_path
 
     def run_all(
@@ -712,7 +999,6 @@ class ReportBuilder:
         result: pd.DataFrame,
         checks: list[dict[str, Any]] | None,
         ctx: BuildContext,
-        t0: float,
     ) -> None:
         if checks:
             for spec in checks:
@@ -750,7 +1036,6 @@ class ReportBuilder:
                 ctx,
                 f"  ВНИМАНИЕ: нет колонки ZW — в config нужен «{ctx.zw_file}» с aggregate",
             )
-        emit(ctx, f"  всего: {time.perf_counter() - t0:.1f} с")
 
 
 def build_merge(
