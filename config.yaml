@@ -7,7 +7,7 @@
 #   2. computed_columns — формулы Key, Customer Key (не из Excel)
 #   3. post_sources[]  — join после Key (справочник Ключ-Иерархия)
 #   4. checks[]        — колонки проверок true/false
-#   5. cgrp_splits     — доп. файлы A DI / A IN / B DI / B IN в папке merge_{sorg}/
+#   5. cgrp_splits     — файлы в merge_{sorg}/ по колонке Check bucket (CGrp&Grp4)
 #
 # ПУТИ К ФАЙЛАМ (lib/paths.py, lib/sorg.py):
 #   - Base, CH6, ZW…: папка {sorg} (3801–3806), имена «3805 …» → «{sorg} …»
@@ -54,22 +54,15 @@ output_file: merge_columns_{sorg}.xlsx
 sorg: "3805"          # шаблон имён файлов в sources; реальная папка — source_dir / -s
 reference_dir: "references"
 
-# Дополнительно к merge_columns_{sorg}.xlsx — фильтр по CGrp + Grp4 в папку merge_{sorg}/
+# Дополнительно к merge_columns_{sorg}.xlsx — разбивка по Check bucket в merge_{sorg}/
 cgrp_splits:
   dir: "merge_{sorg}"
+  bucket_column: "Check bucket"
   files:
-    - cgrp: "A"
-      grp4: "DI"
-      name: "A DI.xlsx"
-    - cgrp: "A"
-      grp4: "IN"
-      name: "A IN.xlsx"
-    - cgrp: "B"
-      grp4: "DI"
-      name: "B DI.xlsx"
-    - cgrp: "B"
-      grp4: "IN"
-      name: "B IN.xlsx"
+    - bucket: "ADI"
+    - bucket: "AIN"
+    - bucket: "BDI"
+    - bucket: "BIN"
 
 at_work_a8_reference:  # справочник для формулы Key (At Work / Education); лист в xlsx
   file: "Справочник At Work&Education.xlsx"
@@ -122,8 +115,9 @@ column_order:  # порядок колонок в итоговом Excel (ост
   - "Key_CH6"
   - "Key_CH6_Name"
   - "Check CH6 Customer & Key_CH6"
-  - "Key_CH_SO"
-  - "Check SO and key ch_so"
+  - "Key_CH6_SO"
+  - "Check SO and Key CH6_SO"
+  - "Check bucket"
 
 # Вычисляются ПОСЛЕ sources[], ДО post_sources[] (lib/computed.py)
 computed_columns:
@@ -207,7 +201,8 @@ column_colors:  # заливка заголовков в Excel (lib/builder.py)
     - "Check_TN_CGrp"
     - "Check CH6 Customer & Key_CH6"
     - "Check SO ZW_SO"
-    - "Check SO and key ch_so"
+    - "Check SO and Key CH6_SO"
+    - "Check bucket"
   DCECF8:
     - "ZW"
     - "ZW_SO"
@@ -224,7 +219,7 @@ column_colors:  # заливка заголовков в Excel (lib/builder.py)
     - "Key"
     - "Key_CH6"
     - "Key_CH6_Name"
-    - "Key_CH_SO"
+    - "Key_CH6_SO"
 
 excel_autofit_columns: true
 excel_autofit_sample_rows: 1000
@@ -281,10 +276,10 @@ checks:
     ok: "true"
     fail: "false"
 
-  - name: "Check SO and key ch_so"
+  - name: "Check SO and Key CH6_SO"
     type: compare_match_empty
     left_column: "SOrg."
-    right_column: "Key_CH_SO"
+    right_column: "Key_CH6_SO"
     ok: "true"
     fail: "false"
 
@@ -312,7 +307,7 @@ post_sources:
       - name: "Key_CH6_Name"
         source: "Название узла"
 
-  # Key_CH_SO: Key_CH6 → 6th level в справочнике CH6 → SO
+  # Key_CH6_SO: Key_CH6 → 6th level в справочнике CH6 → SO
   - file: "Справочник_CH6 SO"
     sheet: 0
     merge_on:
@@ -320,7 +315,7 @@ post_sources:
       right: ["6th level"]
     dedupe: true
     columns:
-      - name: "Key_CH_SO"
+      - name: "Key_CH6_SO"
         source: "SO"
 
 # Основная цепочка merge; первый блок — база, без merge_on

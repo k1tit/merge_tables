@@ -129,7 +129,22 @@ class ReportBuilder:
         emit(ctx, "  проверки (Check ...)...")
         checks = cfg.get("checks")
         result = CheckEngine().apply(result, checks)
+        result = self._add_check_bucket(result, cfg)
         return self._order_columns(result, cfg, ctx)
+
+    @staticmethod
+    def _add_check_bucket(df: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
+        split_cfg = cfg.get("cgrp_splits") or {}
+        col = str(split_cfg.get("bucket_column", "Check bucket")).strip()
+        if not col:
+            return df
+        if "CGrp" not in df.columns or "Grp4" not in df.columns:
+            return df
+        out = df.copy()
+        cgrp = out["CGrp"].map(lambda v: TextNorm.key_part(v).upper())
+        grp4 = out["Grp4"].map(lambda v: TextNorm.key_part(v).upper())
+        out[col] = cgrp + grp4
+        return out
 
     def _build(self, ctx: BuildContext) -> Path:
         ctx.log_file = ctx.base_dir / "merge_build.log"
@@ -171,18 +186,17 @@ class ReportBuilder:
     def _norm_split_value(val: Any) -> str:
         return TextNorm.key_value(val).upper()
 
-    def _filter_cgrp_split(
-        self, df: pd.DataFrame, *, cgrp: str, grp4: str
+    def _filter_bucket_split(
+        self, df: pd.DataFrame, bucket_col: str, bucket: str
     ) -> pd.DataFrame:
-        if "CGrp" not in df.columns or "Grp4" not in df.columns:
+        if bucket_col not in df.columns:
             raise KeyError(
-                "Для cgrp_splits нужны колонки CGrp и Grp4 в отчёте."
+                f"Для cgrp_splits нет колонки {bucket_col!r}. "
+                f"Есть: {list(df.columns)}"
             )
-        want_cgrp = self._norm_split_value(cgrp)
-        want_grp4 = self._norm_split_value(grp4)
-        cgrp_series = df["CGrp"].map(self._norm_split_value)
-        grp4_series = df["Grp4"].map(self._norm_split_value)
-        return df.loc[cgrp_series.eq(want_cgrp) & grp4_series.eq(want_grp4)].copy()
+        want = self._norm_split_value(bucket)
+        series = df[bucket_col].map(self._norm_split_value)
+        return df.loc[series.eq(want)].copy()
 
     def _write_cgrp_splits(
         self, ctx: BuildContext, result: pd.DataFrame
@@ -191,10 +205,11 @@ class ReportBuilder:
         if not spec:
             return []
 
-        files = spec.get("files") or []
+        files = spec.get("files") or spec.get("buckets") or []
         if not files:
             return []
 
+        bucket_col = str(spec.get("bucket_column", "Check bucket")).strip()
         sorg = str(ctx.config.get("sorg") or ctx.sorg).strip()
         dir_template = str(spec.get("dir", "merge_{sorg}"))
         out_dir = ctx.base_dir / dir_template.format(sorg=sorg)
@@ -205,16 +220,26 @@ class ReportBuilder:
         paths: list[Path] = []
 
         if ctx.verbose:
-            emit(ctx, f"  разбивка по CGrp/Grp4 → {out_dir.name}/")
+            emit(ctx, f"  разбивка по {bucket_col!r} → {out_dir.name}/")
 
         for item in files:
-            cgrp = str(item.get("cgrp", "")).strip()
-            grp4 = str(item.get("grp4", "")).strip()
-            name = str(item.get("name") or item.get("file") or f"{cgrp} {grp4}.xlsx").strip()
-            if not cgrp or not grp4 or not name:
+            if isinstance(item, str):
+                bucket = item.strip()
+                name = f"{bucket}.xlsx"
+            else:
+                bucket = str(item.get("bucket", "")).strip()
+                if not bucket and item.get("cgrp") and item.get("grp4"):
+                    bucket = (
+                        self._norm_split_value(item["cgrp"])
+                        + self._norm_split_value(item["grp4"])
+                    )
+                name = str(
+                    item.get("name") or item.get("file") or f"{bucket}.xlsx"
+                ).strip()
+            if not bucket:
                 continue
 
-            part = self._filter_cgrp_split(result, cgrp=cgrp, grp4=grp4)
+            part = self._filter_bucket_split(result, bucket_col, bucket)
             out_path = out_dir / name
             self._write(
                 part,
@@ -232,7 +257,7 @@ class ReportBuilder:
                 emit(
                     ctx,
                     f"    {out_dir.name}/{name}: {len(part)} строк "
-                    f"(CGrp={cgrp}, Grp4={grp4})",
+                    f"({bucket_col}={bucket})",
                 )
         return paths
 
