@@ -83,9 +83,7 @@ class ExcelSourceReader:
             hint = self.paths.lookup_hint(rel)
             raise FileNotFoundError(f"Файл не найден: {path} ({hint})")
 
-        sheet = spec.get("sheet", 0)
-        if isinstance(sheet, str):
-            sheet = sheet.replace("{sorg}", self.ctx.sorg)
+        sheet = self._resolve_sheet(path, spec)
         plain_specs, inline_computed, column_order = ColumnSpecParser.parse(
             spec["columns"]
         )
@@ -247,6 +245,38 @@ class ExcelSourceReader:
                     f"  {rel!r}: удалено {removed} полных дублей строк",
                 )
         return out
+
+    def _resolve_sheet(self, path: Path, spec: dict[str, Any]) -> Any:
+        """Лист Excel: {sorg} → имя листа; если нет — первый лист (файл в папке SOrg)."""
+        raw = spec.get("sheet", 0)
+        if isinstance(raw, str):
+            sheet = raw.replace("{sorg}", self.ctx.sorg)
+        else:
+            sheet = raw
+
+        if not isinstance(sheet, str):
+            return sheet
+
+        try:
+            names = pd.ExcelFile(path, engine=self.ctx.read_engine).sheet_names
+        except Exception:
+            return sheet
+
+        if sheet in names:
+            return sheet
+        if sheet.isdigit():
+            idx = int(sheet)
+            if 0 <= idx < len(names):
+                return idx
+
+        fallback = names[0] if names else 0
+        if self.ctx.verbose:
+            emit(
+                self.ctx,
+                f"  {path.name}: лист {sheet!r} не найден — "
+                f"используется {fallback!r}",
+            )
+        return fallback
 
     def _apply_reference_filter_raw(
         self,

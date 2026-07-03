@@ -90,7 +90,20 @@ class PathResolver:
     def _search_roots(self, rel: str) -> list[Path]:
         if self.is_sorg_data_file(rel):
             return [self.data_root]
+        if self._is_hierarchy_ref(rel):
+            roots: list[Path] = []
+            if self.source_dir:
+                roots.append(self.data_root)
+            roots.append(self.reference_root)
+            return roots
         return [self.reference_root]
+
+    @staticmethod
+    def _is_hierarchy_ref(rel: str) -> bool:
+        stem = Path(rel).stem.strip()
+        if stem in FILE_ALIASES:
+            stem = Path(FILE_ALIASES[stem]).stem
+        return stem == "Справочник Ключ-Иерархия" or "Ключ-Иерархия" in stem
 
     @staticmethod
     def _candidates(root: Path, rel_path: Path) -> list[Path]:
