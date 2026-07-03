@@ -325,12 +325,12 @@ post_sources:
       - name: "Key_CH6_Name"
         source: "Название узла"  # только из Ключ-Иерархия, не из CH6
 
-  # Справочник_CH6: Key_CH6 = 6th level → SO
+  # Справочник_CH6: Key_CH6 + SOrg. → 6th level + SO (иначе SO=3801 у всех SOrg)
   - file: "Справочник_CH6 SO"
     sheet: 0
     merge_on:
-      left: ["Key_CH6"]
-      right: ["6th level"]
+      left: ["Key_CH6", "SOrg."]
+      right: ["6th level", "SO"]
     dedupe: true
     columns:
       - name: "Key_CH6_SO"
@@ -388,12 +388,12 @@ sources:
       - name: "CH6_CGrp"
         source: "6th level_CGrp"
 
-  # --- 4. Trade Name → TN_* (Справочник_CH6: SO + Trade Name; несколько CH6 → через запятую) ---
+  # --- 4. Trade Name → TN_* (Справочник_CH6: SO Trade Name + Trade Name; все CH6) ---
   - file: "Справочник_CH6"
     sheet: 0
     merge_on:
       left: ["SOrg.", "Trade Name"]
-      right: ["SO", "Trade Name"]
+      right: ["SO Trade Name", "Trade Name"]
     key_excel:
       Trade Name: "TRADE NAME #"
     aggregate:
@@ -402,7 +402,7 @@ sources:
         separator: ", "
         unique: true
       TN_CH6_Name:
-        source: "6th level_Name"
+        source: "6th level_name"
         separator: ", "
         unique: true
       TN_CGrp:
@@ -414,7 +414,7 @@ sources:
       - name: "TN_CH6"
         source: "6th level"
       - name: "TN_CH6_Name"
-        source: "6th level_Name"
+        source: "6th level_name"
       - name: "TN_CGrp"
         source: "6th level_CGrp"
 

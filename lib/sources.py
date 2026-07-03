@@ -150,6 +150,16 @@ class ExcelSourceReader:
         if rename_map:
             df = df.rename(columns=rename_map)
 
+        if merge_right:
+            for key in merge_right:
+                if key in df.columns:
+                    continue
+                excel = (key_excel or {}).get(key, key)
+                for p in plain_specs:
+                    if p["name"] in df.columns and p.get("excel") == excel:
+                        df[key] = df[p["name"]]
+                        break
+
         for col in text_cols:
             if col in df.columns:
                 df[col] = df[col].map(
@@ -194,7 +204,12 @@ class ExcelSourceReader:
                 f"После чтения нет колонок {missing_out!r} (файл: {rel}). "
                 f"Получено: {list(df.columns)}"
             )
-        df = df[[c for c in required if c in df.columns]]
+        req_cols = list(required)
+        if merge_right:
+            for key in merge_right:
+                if key in df.columns and key not in req_cols:
+                    req_cols.append(key)
+        df = df[[c for c in req_cols if c in df.columns]]
 
         out = df.copy()
         out = ComputedColumnsApplier.apply(out, computed or None)
