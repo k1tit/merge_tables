@@ -84,6 +84,8 @@ class ExcelSourceReader:
             raise FileNotFoundError(f"Файл не найден: {path} ({hint})")
 
         sheet = spec.get("sheet", 0)
+        if isinstance(sheet, str):
+            sheet = sheet.replace("{sorg}", self.ctx.sorg)
         plain_specs, inline_computed, column_order = ColumnSpecParser.parse(
             spec["columns"]
         )

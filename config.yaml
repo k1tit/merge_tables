@@ -307,14 +307,16 @@ checks:
     ok: "true"
     fail: "false"
 
-# Join ПОСЛЕ computed_columns (нужен Customer Key)
+# Join ПОСЛЕ computed_columns (нужен Key отчёта)
 post_sources:
-  # Справочник Ключ-Иерархия: Customer Key → «Ключ» → Узел, Название узла
+  # Справочник Ключ-Иерархия: Key (формула) → «Ключ» на листе {sorg} → Узел, Название узла
   - file: "Справочник Ключ-Иерархия"
-    sheet: 0
+    sheet: "{sorg}"
     merge_on:
-      left: ["Customer Key"]
-      right: ["Ключ"]
+      left: ["Key"]
+      right: ["Key"]
+    key_excel:
+      Key: "Ключ"
     dedupe: true
     columns:
       - name: "Key_CH6"
