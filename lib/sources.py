@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,8 @@ from .context import BuildContext
 from .log_sink import emit
 from .paths import PathResolver
 from .text_utils import TextNorm
-from .zw_link import load_zw_partner_map, sold_to_key
+_SKIP_HIERARCHY_SHEETS = frozenset({"allso", "q", "p_di", "da"})
+_SORG_SHEET_RE = re.compile(r"^380[1-6]$")
 
 
 class ExcelSourceReader:
@@ -247,36 +249,62 @@ class ExcelSourceReader:
         return out
 
     def _resolve_sheet(self, path: Path, spec: dict[str, Any]) -> Any:
-        """Лист Excel: {sorg} → имя листа; если нет — первый лист (файл в папке SOrg)."""
+        """Лист Excel: {sorg}; не использовать AllSO/Q/DA как fallback."""
         raw = spec.get("sheet", 0)
         if isinstance(raw, str):
-            sheet = raw.replace("{sorg}", self.ctx.sorg)
+            want = raw.replace("{sorg}", self.ctx.sorg)
         else:
-            sheet = raw
-
-        if not isinstance(sheet, str):
-            return sheet
+            return raw
 
         try:
-            names = pd.ExcelFile(path, engine=self.ctx.read_engine).sheet_names
+            names = list(pd.ExcelFile(path, engine=self.ctx.read_engine).sheet_names)
         except Exception:
-            return sheet
+            return want
 
-        if sheet in names:
-            return sheet
-        if sheet.isdigit():
-            idx = int(sheet)
-            if 0 <= idx < len(names):
-                return idx
+        if want in names:
+            return want
 
-        fallback = names[0] if names else 0
+        in_sorg_folder = (
+            path.parent.resolve() == self.paths.data_root.resolve()
+            or self.paths.data_root.resolve() in path.parent.resolve().parents
+        )
+        non_special = [
+            n for n in names if TextNorm.name(str(n)) not in _SKIP_HIERARCHY_SHEETS
+        ]
+        sorg_sheets = [n for n in names if _SORG_SHEET_RE.fullmatch(str(n))]
+
+        if in_sorg_folder and non_special:
+            pick = non_special[0]
+            if self.ctx.verbose:
+                emit(
+                    self.ctx,
+                    f"  {path.name}: лист {want!r} не найден — "
+                    f"используется {pick!r} (файл в папке SOrg)",
+                )
+            return pick
+
+        if sorg_sheets and want not in names:
+            raise ValueError(
+                f"{path.name}: нет листа {want!r}. "
+                f"Доступны листы SOrg: {', '.join(sorg_sheets)}. "
+                f"Обновите справочник в references/ или положите файл в "
+                f"папку {self.ctx.sorg}/."
+            )
+
+        if not non_special:
+            raise ValueError(
+                f"{path.name}: нет листа {want!r}. "
+                f"В файле только служебные листы ({', '.join(names)}). "
+                f"Нужен лист {want!r} или файл в папке {self.ctx.sorg}/."
+            )
+
+        pick = non_special[0]
         if self.ctx.verbose:
             emit(
                 self.ctx,
-                f"  {path.name}: лист {sheet!r} не найден — "
-                f"используется {fallback!r}",
+                f"  {path.name}: лист {want!r} не найден — используется {pick!r}",
             )
-        return fallback
+        return pick
 
     def _apply_reference_filter_raw(
         self,

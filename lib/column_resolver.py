@@ -168,7 +168,7 @@ class ColumnResolver:
                 if "higher-level" in col_norm and "higher" in ex_norm and "customer" in ex_norm:
                     found = excel_name
                     break
-                if col_norm == "key" and ex_norm in ("ключ", "key"):
+                if col_norm in ("key", "ключ") and ex_norm in ("ключ", "key"):
                     found = excel_name
                     break
                 if col_norm == "trade name" and "trade name" in ex_norm:

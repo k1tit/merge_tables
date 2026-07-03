@@ -316,8 +316,6 @@ post_sources:
     merge_on:
       left: ["Key"]
       right: ["Key"]
-    key_excel:
-      Key: "Ключ"
     dedupe: true
     columns:
       - name: "Key_CH6"
