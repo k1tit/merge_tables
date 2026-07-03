@@ -310,9 +310,9 @@ checks:
 
 # Join ПОСЛЕ computed_columns (нужен Key отчёта)
 post_sources:
-  # Справочник Ключ-Иерархия: Key → «Ключ»; лист {sorg} или первый лист (файл в папке SOrg)
+  # Справочник Ключ-Иерархия: Key отчёта → колонка «Ключ» → Узел, Название узла
   - file: "Справочник Ключ-Иерархия"
-    sheet: "{sorg}"
+    sheet: 0
     merge_on:
       left: ["Key"]
       right: ["Key"]
@@ -386,12 +386,12 @@ sources:
       - name: "CH6_CGrp"
         source: "6th level_CGrp"
 
-  # --- 4. Trade Name → TN_* (Справочник_CH6: SO Trade Name + Trade Name; все CH6) ---
+  # --- 4. Trade Name → TN_* (Справочник_CH6: Trade Name → TRADE NAME #; все CH6) ---
   - file: "Справочник_CH6"
     sheet: 0
     merge_on:
-      left: ["SOrg.", "Trade Name"]
-      right: ["SO Trade Name", "Trade Name"]
+      left: ["Trade Name"]
+      right: ["Trade Name"]
     key_excel:
       Trade Name: "TRADE NAME #"
     aggregate:

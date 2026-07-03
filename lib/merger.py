@@ -127,8 +127,8 @@ class DataMerger:
                         if col in ("TN_CH6", "TN_CH6_Name", "TN_CGrp"):
                             emit(
                                 self.ctx,
-                                f"    ВНИМАНИЕ: {col!r} пустая — в справочнике CH6_CGrp "
-                                f"нет SO Trade Name={self.ctx.sorg!r} или не совпадает Trade Name",
+                                f"    ВНИМАНИЕ: {col!r} пустая — в Справочник_CH6 "
+                                f"нет TRADE NAME # для Trade Name строки",
                             )
                         else:
                             emit(
