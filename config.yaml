@@ -309,7 +309,7 @@ checks:
 
 # Join ПОСЛЕ computed_columns (нужен Customer Key)
 post_sources:
-  # Справочник Ключ-Иерархия: Customer Key (Grp4+CGrp+A7+380N) → колонка «Ключ» → Узел
+  # Справочник Ключ-Иерархия: Customer Key → «Ключ» → Узел, Название узла
   - file: "Справочник Ключ-Иерархия"
     sheet: 0
     merge_on:
@@ -319,8 +319,10 @@ post_sources:
     columns:
       - name: "Key_CH6"
         source: "Узел"           # в Excel: «Узел» или «Иерархия»
+      - name: "Key_CH6_Name"
+        source: "Название узла"  # только из Ключ-Иерархия, не из CH6
 
-  # Справочник_CH6: Key_CH6 = 6th level → 6th level_Name, SO
+  # Справочник_CH6: Key_CH6 = 6th level → SO
   - file: "Справочник_CH6 SO"
     sheet: 0
     merge_on:
@@ -328,8 +330,6 @@ post_sources:
       right: ["6th level"]
     dedupe: true
     columns:
-      - name: "Key_CH6_Name"
-        source: "6th level_Name"
       - name: "Key_CH6_SO"
         source: "SO"
 
