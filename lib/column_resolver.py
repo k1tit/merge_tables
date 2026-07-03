@@ -171,6 +171,9 @@ class ColumnResolver:
                 if col_norm == "key" and ex_norm in ("ключ", "key"):
                     found = excel_name
                     break
+                if col_norm == "trade name" and "trade name" in ex_norm:
+                    found = excel_name
+                    break
                 if col_norm == "узел" and (
                     ex_norm == "узел"
                     or ex_norm == "иерархия"

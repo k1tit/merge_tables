@@ -387,22 +387,21 @@ sources:
       - name: "CH6_CGrp"
         source: "6th level_CGrp"
 
-  # --- 4. Trade Name → TN_* (фильтр по SO Trade Name = {sorg}) ---
-  - file: "Справочник_CH6_CGrp.xlsx"
+  # --- 4. Trade Name → TN_* (Справочник_CH6: SO + Trade Name; несколько CH6 → через запятую) ---
+  - file: "Справочник_CH6"
     sheet: 0
     merge_on:
-      left: ["Trade Name"]
-      right: ["Trade Name"]
-    reference_filter:
-      SO Trade Name: "{sorg}"
-    reference_filter_fallback: trade_name_only
+      left: ["SOrg.", "Trade Name"]
+      right: ["SO", "Trade Name"]
+    key_excel:
+      Trade Name: "TRADE NAME #"
     aggregate:
       TN_CH6:
         source: "6th level"
         separator: ", "
         unique: true
       TN_CH6_Name:
-        source: "6th level_name"
+        source: "6th level_Name"
         separator: ", "
         unique: true
       TN_CGrp:
@@ -414,7 +413,7 @@ sources:
       - name: "TN_CH6"
         source: "6th level"
       - name: "TN_CH6_Name"
-        source: "6th level_name"
+        source: "6th level_Name"
       - name: "TN_CGrp"
         source: "6th level_CGrp"
 
