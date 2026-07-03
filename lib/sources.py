@@ -246,6 +246,10 @@ class ExcelSourceReader:
                     self.ctx,
                     f"  {rel!r}: удалено {removed} полных дублей строк",
                 )
+        if merge_right:
+            from .merge_keys import MergeKeysParser
+
+            out = MergeKeysParser.normalize_frame(out, merge_right)
         return out
 
     def _resolve_sheet(self, path: Path, spec: dict[str, Any]) -> Any:

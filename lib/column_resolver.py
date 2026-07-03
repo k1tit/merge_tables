@@ -77,12 +77,22 @@ class ColumnSpecParser:
     @staticmethod
     def output_names(spec: dict[str, Any]) -> list[str]:
         _, computed, order = ColumnSpecParser.parse(spec["columns"])
-        names = list(order)
+        aggregate = spec.get("aggregate") or {}
+        agg_sources: set[str] = set()
+        for rule in aggregate.values():
+            if isinstance(rule, str):
+                agg_sources.add(rule)
+            elif isinstance(rule, dict):
+                src = rule.get("source") or rule.get("column")
+                if src:
+                    agg_sources.add(str(src))
+
+        names = [n for n in order if n not in agg_sources]
         for item in computed:
             n = str(item["name"])
             if n not in names:
                 names.append(n)
-        for out_name in spec.get("aggregate") or {}:
+        for out_name in aggregate:
             if out_name not in names:
                 names.append(str(out_name))
         return names

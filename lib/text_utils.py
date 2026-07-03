@@ -71,7 +71,10 @@ class TextNorm:
             return str(val)
         if isinstance(val, (int,)) or (isinstance(val, float) and val == int(val)):
             return str(int(val))
-        return str(val).strip()
+        text = str(val).strip()
+        if text.endswith(".0") and text[:-2].isdigit():
+            return text[:-2]
+        return text
 
     @staticmethod
     def trade_name_key(val: Any) -> str:

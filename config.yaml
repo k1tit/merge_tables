@@ -183,6 +183,8 @@ text_columns:       # читать как текст (lib/sources.py)
   - "A8"
   - "PG"
   - "SDst"
+  - "Trade Name"
+  - "Search Term 2"
   - "Check Status"
   - "Comment"
 
@@ -410,11 +412,11 @@ sources:
         unique: true
     merge_require_non_empty: ["Trade Name"]
     columns:
-      - name: "TN_CH6"
+      - name: "6th level"
         source: "6th level"
-      - name: "TN_CH6_Name"
+      - name: "6th level_name"
         source: "6th level_name"
-      - name: "TN_CGrp"
+      - name: "6th level_CGrp"
         source: "6th level_CGrp"
 
   # --- 5. ZW: sold-to → партнёр; файл из папки {sorg}; все строки файла (любой SOrg.) ---

@@ -113,6 +113,16 @@ class DataMerger:
                 msg += " (колонка создана, но merge не добавил — проверьте ключи)"
             msg += f", ключ совпал у {overlap} строк"
             emit(self.ctx, msg)
+            if (
+                overlap == 0
+                and label == "merge"
+                and set(left) == {"SOrg.", "Trade Name"}
+            ):
+                emit(
+                    self.ctx,
+                    "    ВНИМАНИЕ: TN merge — 0 совпадений по SOrg.+Trade Name. "
+                    "Проверьте references/Справочник_CH6.xlsx (колонки SO, TRADE NAME #).",
+                )
             if overlap == 0 and label == "post-merge" and "Key" in left:
                 emit(
                     self.ctx,
