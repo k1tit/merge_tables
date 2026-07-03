@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 
 from .constants import DEFAULT_SORG_DIRS, FILE_ALIASES, SORG_FILE_PREFIX_RE
+from .excel_io import excel_read_engine
 from .text_utils import TextNorm
 
 _SORG_FILE_REST_RE = re.compile(r"^380[1-6]\s+(.*)$", re.IGNORECASE)
@@ -122,8 +123,9 @@ class PathResolver:
         if not root.is_dir():
             return None
         for path in sorted(root.glob("*.xlsx")) + sorted(root.glob("*.xls")):
+            engine = excel_read_engine()
             try:
-                header = pd.read_excel(path, nrows=0, engine="calamine")
+                header = pd.read_excel(path, nrows=0, engine=engine)
             except Exception:
                 try:
                     header = pd.read_excel(path, nrows=0)
@@ -160,8 +162,9 @@ class PathResolver:
             return None
         need = {TextNorm.name(h) for h in must_have}
         for path in sorted(root.glob("*.xlsx")) + sorted(root.glob("*.xls")):
+            engine = excel_read_engine()
             try:
-                header = pd.read_excel(path, nrows=0, engine="calamine")
+                header = pd.read_excel(path, nrows=0, engine=engine)
             except Exception:
                 try:
                     header = pd.read_excel(path, nrows=0)

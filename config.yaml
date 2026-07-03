@@ -410,7 +410,6 @@ sources:
         source: "6th level_CGrp"
         separator: ", "
         unique: true
-    merge_require_non_empty: ["Trade Name"]
     columns:
       - name: "6th level"
         source: "6th level"

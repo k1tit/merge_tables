@@ -26,17 +26,10 @@ from .text_utils import TextNorm
 from .merger import DataMerger
 from .merge_keys import MergeKeysParser
 from .sources import ExcelSourceReader
+from .tn_fallback import fill_tn_from_ch6, tn_filled_count
 
 
-def excel_read_engine(preferred: str | None) -> str:
-    if preferred:
-        return preferred
-    try:
-        import python_calamine  # noqa: F401
-
-        return "calamine"
-    except ImportError:
-        return "openpyxl"
+from .excel_io import excel_read_engine
 
 
 def resolve_output_path(ctx: BuildContext) -> Path:
@@ -133,6 +126,15 @@ class ReportBuilder:
 
         emit(ctx, "  объединение источников (merge)...")
         result = merger.merge_all(frames, sources)
+        before_tn = tn_filled_count(result)
+        result = fill_tn_from_ch6(result)
+        after_tn = tn_filled_count(result)
+        if ctx.verbose and after_tn > before_tn:
+            emit(
+                ctx,
+                f"  TN fallback (CH6): +{after_tn - before_tn} строк, "
+                f"TN_CH6 заполнено {after_tn} из {len(result)}",
+            )
         ref_path = ensure_at_work_reference_file(ctx.base_dir, cfg)
         if ref_path and ctx.verbose:
             emit(ctx, f"  справочник At Work&Education: {ref_path.name}")
