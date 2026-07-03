@@ -252,6 +252,7 @@ checks:
     type: match_when_in_either
     columns: ["CGrp", "CH6_CGrp"]
     values: ["S", "F", "K", "Q"]
+    empty: ""
     ok: "true"
     fail: "false"
 
