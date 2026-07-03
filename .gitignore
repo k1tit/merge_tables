@@ -7,6 +7,7 @@ MergeColumns_ready/
 !references/*.xlsx
 !references/*.XLSX
 merge_build.log
+tn_columns.log
 merge_380*/
 3805/
 3801/
