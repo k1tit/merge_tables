@@ -174,7 +174,10 @@ class ColumnResolver:
                 if col_norm == "trade name" and "trade name" in ex_norm:
                     found = excel_name
                     break
-                if col_norm == "so trade name" and ex_norm in ("so", "so trade name"):
+                if col_norm in ("so trade name", "so") and ex_norm in (
+                    "so",
+                    "so trade name",
+                ):
                     found = excel_name
                     break
                 if col_norm == "узел" and (

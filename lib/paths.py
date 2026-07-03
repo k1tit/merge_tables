@@ -80,6 +80,11 @@ class PathResolver:
             if found:
                 return found
 
+        if self._is_ch6_trade_ref(rel_stem):
+            found = self._find_ch6_trade_ref(self.reference_root)
+            if found:
+                return found
+
         return self._candidates(self._search_roots(rel)[0], path)[0]
 
     def lookup_hint(self, rel: str) -> str:
@@ -104,6 +109,33 @@ class PathResolver:
         if stem in FILE_ALIASES:
             stem = Path(FILE_ALIASES[stem]).stem
         return stem == "Справочник Ключ-Иерархия" or "Ключ-Иерархия" in stem
+
+    @staticmethod
+    def _is_ch6_trade_ref(rel_stem: str) -> bool:
+        stem = rel_stem.strip()
+        if stem in FILE_ALIASES:
+            stem = Path(FILE_ALIASES[stem]).stem
+        return stem in ("Справочник_CH6", "Справочник_CH6 SO")
+
+    def _find_ch6_trade_ref(self, root: Path) -> Path | None:
+        """Справочник CH6 по заголовкам SO + TRADE NAME # (имя файла может отличаться)."""
+        if not root.is_dir():
+            return None
+        for path in sorted(root.glob("*.xlsx")) + sorted(root.glob("*.xls")):
+            try:
+                header = pd.read_excel(path, nrows=0, engine="calamine")
+            except Exception:
+                try:
+                    header = pd.read_excel(path, nrows=0)
+                except Exception:
+                    continue
+            found = {TextNorm.name(str(c)) for c in header.columns}
+            has_so = "so" in found or "so trade name" in found
+            has_tn = any("trade name" in c for c in found)
+            has_ch6 = any("6th level" in c for c in found)
+            if has_so and has_tn and has_ch6:
+                return path
+        return None
 
     @staticmethod
     def _candidates(root: Path, rel_path: Path) -> list[Path]:

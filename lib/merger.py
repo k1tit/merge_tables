@@ -128,7 +128,7 @@ class DataMerger:
                             emit(
                                 self.ctx,
                                 f"    ВНИМАНИЕ: {col!r} пустая — в Справочник_CH6 "
-                                f"нет TRADE NAME # для Trade Name строки",
+                                f"нет пары SO+TRADE NAME # для SOrg.+Trade Name",
                             )
                         else:
                             emit(

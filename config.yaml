@@ -279,7 +279,7 @@ checks:
     right_column: "TN_CH6"
     list_compare: true
     separator: ", "
-    empty: "пусто"
+    empty: ""
     ok: "true"
     fail: "false"
 
@@ -287,7 +287,7 @@ checks:
     type: match_when_in_either
     columns: ["CGrp", "TN_CGrp"]
     values: ["S", "F", "K", "Q"]
-    empty: "пусто"
+    empty: ""
     ok: "true"
     fail: "false"
 
@@ -296,7 +296,7 @@ checks:
     left_column: "CH6"
     right_column: "Key_CH6"
     dash_match: true
-    empty: "пусто"
+    empty: ""
     ok: "true"
     fail: "false"
 
@@ -304,7 +304,7 @@ checks:
     type: compare_match_empty
     left_column: "SOrg."
     right_column: "Key_CH6_SO"
-    empty: "пусто"
+    empty: ""
     ok: "true"
     fail: "false"
 
@@ -386,13 +386,14 @@ sources:
       - name: "CH6_CGrp"
         source: "6th level_CGrp"
 
-  # --- 4. Trade Name → TN_* (Справочник_CH6: Trade Name → TRADE NAME #; все CH6) ---
+  # --- 4. Trade Name → TN_* (Справочник_CH6: SOrg.+Trade Name → SO+TRADE NAME #) ---
   - file: "Справочник_CH6"
     sheet: 0
     merge_on:
-      left: ["Trade Name"]
-      right: ["Trade Name"]
+      left: ["SOrg.", "Trade Name"]
+      right: ["SO Trade Name", "Trade Name"]
     key_excel:
+      SO Trade Name: "SO"
       Trade Name: "TRADE NAME #"
     aggregate:
       TN_CH6:
