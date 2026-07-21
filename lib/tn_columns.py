@@ -16,15 +16,15 @@ from .tn_fallback import fill_tn_from_ch6, tn_filled_count
 from .text_utils import TextNorm
 
 TN_REF_SPEC: dict[str, Any] = {
-    "file": "Справочник_CH6",
-    "sheet": 0,
+    "file": "References_CH6.xlsx",
+    "sheet": "Nodes_CH6",
     "merge_on": {
         "left": ["SOrg.", "Trade Name"],
         "right": ["SO Trade Name", "Trade Name"],
     },
     "key_excel": {
         "SO Trade Name": "SO",
-        "Trade Name": "TRADE NAME #",
+        "Trade Name": "TRADE NAME",
     },
     "aggregate": {
         "TN_CH6": {

@@ -54,47 +54,45 @@
 # =============================================================================
 
 output_file: merge_columns_{sorg}.xlsx
-sorg: "3805"          # шаблон имён файлов в sources; реальная папка — source_dir / -s
+sorg: "3805"
+reference_file: "References_CH6.xlsx"
 reference_dir: "references"
 
-# merge_{sorg}/Trade Name.xlsx — все строки с заполненным Trade Name (в т.ч. QDI/QIN)
-# merge_{sorg}/merge_columns_{sorg}.xlsx — остаток; колонка Trade Name пустая
-# bucket-файлы ADI/AIN/BDI/BIN/QDI QIN — Check bucket и Trade Name пустой
-cgrp_splits:
+# 7 взаимоисключающих файлов (merge_{sorg}/); порядок = приоритет категории
+category_splits:
   dir: "merge_{sorg}"
-  bucket_column: "Check bucket"
+  category_column: "Category"
   trade_name_column: "Trade Name"
-  trade_name_file: "Trade Name.xlsx"
   files:
-    - bucket: "ADI"
-    - bucket: "AIN"
-    - bucket: "BDI"
-    - bucket: "BIN"
-  groups:
-    - name: "QDI QIN.xlsx"
-      buckets: ["QDI", "QIN"]
+    - category: "Trade Name"
+      file: "Trade Name.xlsx"
+    - category: "Q+Vend."
+      file: "Q+Vend.xlsx"
+    - category: "IN_ZW_235&249"
+      file: "IN_ZW_235&249.xlsx"
+    - category: "IN_Partner_CH6"
+      file: "IN_Partner_CH6.xlsx"
+    - category: "A DI"
+      file: "A DI.xlsx"
+    - category: "B DI"
+      file: "B DI.xlsx"
+    - category: "Direct_Rest"
+      file: "Direct_Rest.xlsx"
 
-at_work_a8_reference:  # справочник для формулы Key (At Work / Education); лист в xlsx
-  file: "Справочник At Work&Education.xlsx"
-  sheet: "At Work"
-  output_sheet: "Справочник At Work&Education"
-  column: "A8"
-  values:
-    - "216"
-    - "030"
-    - "044"
-    - "043"
-    - "025"
-    - "029"
-    - "042"
-    - "207"
+# Устаревшая разбивка ADI/AIN — не используется при category_splits
+cgrp_splits: null
+
+at_work_a8_reference:
+  file: "References_CH6.xlsx"
+  sheet: "AtWo&Ed"
+  column: "A9"
+  output_sheet: "AtWo&Ed"
 column_order:  # порядок колонок в итоговом Excel (остальные — в конец)
   - "SOrg."
   - "Customer"
   - "Name"
   - "Trade Name"
   - "Indus."
-  - "Ind.Code 1"
   - "Tax Number 1"
   - "A7"
   - "A8"
@@ -107,7 +105,7 @@ column_order:  # порядок колонок в итоговом Excel (ост
   - "CH6"
   - "CH6_Name"
   - "CH6_CGrp"
-  - "Check CH6_CGrp_KA"
+  - "Check CH6_CGrp"
   - "ZW"
   - "ZW_SO"
   - "Check SO ZW_SO"
@@ -127,9 +125,10 @@ column_order:  # порядок колонок в итоговом Excel (ост
   - "Check CH6 Customer & Key_CH6"
   - "Key_CH6_SO"
   - "Check SO and Key CH6_SO"
-  - "Check bucket"
+  - "Category"
   - "Check Status"
   - "Comment"
+  - "Comment2"
 
 # Вычисляются ПОСЛЕ sources[], ДО post_sources[] (lib/computed.py)
 computed_columns:
@@ -194,14 +193,13 @@ leading_zero_columns:  # дополнить нулями слева при за�
   A8: 2
   PG: 2
 
-column_colors:  # заливка заголовков в Excel (lib/builder.py)
-  D7EACF:
+column_colors:
+  C6EFCE:
     - "SOrg."
     - "Customer"
     - "Name"
     - "Trade Name"
     - "Indus."
-    - "Ind.Code 1"
     - "Tax Number 1"
     - "A7"
     - "A8"
@@ -211,37 +209,40 @@ column_colors:  # заливка заголовков в Excel (lib/builder.py)
     - "Grp4"
     - "OrBlk"
     - "OrBlk2"
-  E4DDF3:
+  BDD7EE:
     - "CH6"
     - "CH6_Name"
-  F5E7B8:
+  FCE4D6:
     - "CH6_CGrp"
-  F6D8C8:
-    - "Check CH6_CGrp_KA"
+  F8CBAD:
+    - "Check CH6_CGrp"
     - "Check CH6 Customer & ZW"
     - "Check CH6 Customer & TN"
     - "Check_TN_CGrp"
     - "Check CH6 Customer & Key_CH6"
     - "Check SO ZW_SO"
     - "Check SO and Key CH6_SO"
-    - "Check bucket"
-  DCECF8:
+  FFF2CC:
     - "ZW"
     - "ZW_SO"
-    - "Check SO ZW_SO"
     - "ZW_A7"
     - "ZW_CGrp"
     - "ZW_CH6"
     - "ZW_CH6_Name"
-  D8E6E4:
+  D9EAD3:
     - "TN_CH6"
     - "TN_CH6_Name"
     - "TN_CGrp"
-  D8E0F2:
+  E1D5E7:
     - "Key"
     - "Key_CH6"
     - "Key_CH6_Name"
     - "Key_CH6_SO"
+  F5F5DC:
+    - "Category"
+    - "Check Status"
+    - "Comment"
+    - "Comment2"
 
 excel_autofit_columns: true
 excel_autofit_sample_rows: 1000
@@ -250,13 +251,14 @@ excel_autofit_max_width: 55
 verbose: true
 
 checks:
-  - name: "Check CH6_CGrp_KA"
+  - name: "Check CH6_CGrp"
     type: match_when_in_either
     columns: ["CGrp", "CH6_CGrp"]
     values: ["S", "F", "K", "Q"]
+    ka_guardrail: true
     empty: ""
-    ok: "true"
-    fail: "false"
+    ok: "Ok"
+    fail: "False"
 
   - name: "Check SO ZW_SO"
     type: compare_match_empty
@@ -312,25 +314,23 @@ checks:
 
 # Join ПОСЛЕ computed_columns (нужен Key отчёта)
 post_sources:
-  # Справочник Ключ-Иерархия: Key отчёта → колонка «Ключ» → Узел, Название узла
-  - file: "Справочник Ключ-Иерархия"
-    sheet: 0
+  - file: "References_CH6.xlsx"
+    sheet: "Key_CH6"
     merge_on:
       left: ["Key"]
       right: ["Key"]
     dedupe: true
     columns:
       - name: "Key_CH6"
-        source: "Узел"           # в Excel: «Узел» или «Иерархия»
+        source: "Узел"
       - name: "Key_CH6_Name"
-        source: "Название узла"  # только из Ключ-Иерархия, не из CH6
+        source: "Название узла"
 
-  # Справочник_CH6: Key_CH6 + SOrg. → 6th level + SO (иначе SO=3801 у всех SOrg)
-  - file: "Справочник_CH6 SO"
-    sheet: 0
+  - file: "References_CH6.xlsx"
+    sheet: "Key_CH6"
     merge_on:
       left: ["Key_CH6", "SOrg."]
-      right: ["6th level", "SO"]
+      right: ["Узел", "SO"]
     dedupe: true
     columns:
       - name: "Key_CH6_SO"
@@ -349,7 +349,6 @@ sources:
       - name: "Trade Name"
         source: "Search Term 2"
       - "Indus."
-      - "Ind.Code 1"
       - "Tax Number 1"
       - "A7"
       - "A8"
@@ -377,9 +376,9 @@ sources:
         source: "Text:Customer number of the higher-level"
         optional: true
 
-  # --- 3. CGrp по узлу CH6 (справочник) ---
-  - file: "Справочник_CH6_CGrp.xlsx"
-    sheet: 0
+  # --- 3. CGrp по узлу CH6 (References_CH6 / Nodes_CH6) ---
+  - file: "References_CH6.xlsx"
+    sheet: "Nodes_CH6"
     merge_on:
       left: ["CH6"]
       right: ["6th level"]
@@ -388,15 +387,15 @@ sources:
       - name: "CH6_CGrp"
         source: "6th level_CGrp"
 
-  # --- 4. Trade Name → TN_* (Справочник_CH6: SOrg.+Trade Name → SO+TRADE NAME #) ---
-  - file: "Справочник_CH6"
-    sheet: 0
+  # --- 4. Trade Name → TN_* (Nodes_CH6: SOrg.+Trade Name → SO+TRADE NAME) ---
+  - file: "References_CH6.xlsx"
+    sheet: "Nodes_CH6"
     merge_on:
       left: ["SOrg.", "Trade Name"]
       right: ["SO Trade Name", "Trade Name"]
     key_excel:
       SO Trade Name: "SO"
-      Trade Name: "TRADE NAME #"
+      Trade Name: "TRADE NAME"
     aggregate:
       TN_CH6:
         source: "6th level"

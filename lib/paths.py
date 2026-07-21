@@ -69,6 +69,12 @@ class PathResolver:
             if found is not None:
                 return found
 
+        # References_CH6.xlsx — в корне проекта
+        if self._is_references_ch6(rel_stem):
+            root_file = self.base_dir / "References_CH6.xlsx"
+            if root_file.exists():
+                return root_file
+
         if self.is_sorg_data_file(rel):
             alt = self._resolve_by_sorg_prefix(rel_stem)
             if alt is not None:
@@ -110,6 +116,22 @@ class PathResolver:
         if stem in FILE_ALIASES:
             stem = Path(FILE_ALIASES[stem]).stem
         return stem == "Справочник Ключ-Иерархия" or "Ключ-Иерархия" in stem
+
+    @staticmethod
+    def _is_references_ch6(rel_stem: str) -> bool:
+        stem = rel_stem.strip()
+        if stem in FILE_ALIASES:
+            mapped = Path(FILE_ALIASES[stem]).stem
+            if mapped == "References_CH6":
+                return True
+        return stem in (
+            "References_CH6",
+            "Справочник_CH6",
+            "Справочник_CH6_CGrp",
+            "Справочник_CH6 SO",
+            "Справочник Ключ-Иерархия",
+            "Справочник At Work&Education",
+        ) or "Ключ-Иерархия" in stem
 
     @staticmethod
     def _is_ch6_trade_ref(rel_stem: str) -> bool:

@@ -18,10 +18,12 @@ python merge_columns.py
 python merge_columns.py -s 3805 --no-menu
 ```
 
-  - `merge_3805/merge_columns_3805.xlsx` — остаток: всё, что не попало в split-файлы ниже (в т.ч. без Trade Name)
-  - `merge_3805/Trade Name.xlsx` — все строки с заполненным Trade Name (включая QDI/QIN)
-  - `merge_3805/ADI.xlsx`, `AIN.xlsx`, `BDI.xlsx`, `BIN.xlsx` — по **Check bucket**, Trade Name пустой
-  - `merge_3805/QDI QIN.xlsx` — bucket **QDI** / **QIN**, Trade Name пустой
+  - `merge_3805/Trade Name.xlsx` — Trade Name заполнен
+  - `merge_3805/Q+Vend.xlsx` — CGrp=Q или A7=246
+  - `merge_3805/IN_ZW_235&249.xlsx` — Grp4=IN, CGrp=A/B/H, ZW_A7=235/249
+  - `merge_3805/IN_Partner_CH6.xlsx` — остальные Grp4=IN
+  - `merge_3805/A DI.xlsx`, `B DI.xlsx` — CGrp=A/B, Grp4=DI
+  - `merge_3805/Direct_Rest.xlsx` — остаток
 
 ### Все папки сразу (3801–3806)
 
@@ -37,12 +39,12 @@ python merge_columns.py --all
 
 **Выгрузки** — в папке SOrg (`3801/` … `3806/`), не в git.
 
-**Справочники** — один раз в папке **`references/`** (для всех SOrg):
+**Справочник** — один файл в корне проекта (для всех SOrg):
 
-- `Справочник_CH6_CGrp.xlsx`
-- `Справочник_CH6.xlsx`
-- `Справочник Ключ-Иерархия.xlsx`
-- `Справочник At Work&Education.xlsx`
-- `trade.xlsx`
+- `References_CH6.xlsx` — листы `Key_CH6`, `Nodes_CH6`, `AtWo&Ed`
+
+**Устаревшие** (в `references/`, не используются кодом):
+
+- `Справочник_CH6_CGrp.xlsx`, `Справочник_CH6.xlsx`, `Справочник Ключ-Иерархия.xlsx`, …
 
 Перед запуском закрой выходные файлы в Excel (папка `merge_3805/`, не корень проекта).

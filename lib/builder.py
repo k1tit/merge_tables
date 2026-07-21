@@ -27,6 +27,9 @@ from .merger import DataMerger
 from .merge_keys import MergeKeysParser
 from .sources import ExcelSourceReader
 from .tn_fallback import fill_tn_from_ch6, tn_filled_count
+from .dummy_filter import filter_dummy_clients
+from .categories import assign_categories, category_filenames, split_by_category, CATEGORY_ORDER
+from .category_checks import apply_category_checks
 
 
 from .excel_io import excel_read_engine
@@ -156,22 +159,20 @@ class ReportBuilder:
         emit(ctx, "  проверки (Check ...)...")
         checks = cfg.get("checks")
         result = CheckEngine().apply(result, checks)
-        result = self._add_check_bucket(result, cfg)
-        return self._order_columns(result, cfg, ctx)
 
-    @staticmethod
-    def _add_check_bucket(df: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
-        split_cfg = cfg.get("cgrp_splits") or {}
-        col = str(split_cfg.get("bucket_column", "Check bucket")).strip()
-        if not col:
-            return df
-        if "CGrp" not in df.columns or "Grp4" not in df.columns:
-            return df
-        out = df.copy()
-        cgrp = out["CGrp"].map(lambda v: TextNorm.key_part(v).upper())
-        grp4 = out["Grp4"].map(lambda v: TextNorm.key_part(v).upper())
-        out[col] = cgrp + grp4
-        return out
+        before_dummy = len(result)
+        result = filter_dummy_clients(result)
+        if ctx.verbose and len(result) < before_dummy:
+            emit(ctx, f"  dummy filter: удалено {before_dummy - len(result)} строк")
+
+        result["Category"] = assign_categories(result)
+        ref_file = str(cfg.get("reference_file") or "References_CH6.xlsx")
+        result = apply_category_checks(
+            result,
+            base_dir=str(ctx.base_dir),
+            reference_file=ref_file,
+        )
+        return self._order_columns(result, cfg, ctx)
 
     def _build(self, ctx: BuildContext) -> Path:
         ctx.log_file = ctx.base_dir / "merge_build.log"
@@ -198,7 +199,26 @@ class ReportBuilder:
                 )
 
         result = self._build_dataframe(ctx)
-        split_cfg = ctx.config.get("cgrp_splits") or {}
+        cat_cfg = ctx.config.get("category_splits") or {}
+        cgrp_cfg = ctx.config.get("cgrp_splits") or {}
+
+        if cat_cfg:
+            t_merge_end = time.perf_counter()
+            paths = self._write_category_splits(ctx, result)
+            t_end = time.perf_counter()
+            self._emit_final_timing(
+                ctx,
+                merge_s=t_merge_end - t1,
+                write_s=t_end - t_merge_end,
+                split_s=0.0,
+                total_s=t_end - t0,
+                rows_total=len(result),
+                rows_split=len(result),
+                rows_main=0,
+            )
+            return paths[0] if paths else resolve_output_path(ctx)
+
+        split_cfg = cgrp_cfg
         bucket_col = str(split_cfg.get("bucket_column", "Check bucket")).strip()
         trade_col = str(split_cfg.get("trade_name_column", "Trade Name")).strip()
         all_buckets = self._all_split_buckets(split_cfg)
@@ -622,6 +642,46 @@ class ReportBuilder:
                     buckets=buckets,
                     text_columns=text_columns,
                     trade_col=trade_col,
+                )
+            )
+        return paths
+
+    def _write_category_splits(
+        self,
+        ctx: BuildContext,
+        result: pd.DataFrame,
+    ) -> list[Path]:
+        spec = ctx.config.get("category_splits") or {}
+        sorg = str(ctx.config.get("sorg") or ctx.sorg).strip()
+        dir_template = str(spec.get("dir", "merge_{sorg}"))
+        out_dir = ctx.base_dir / dir_template.format(sorg=sorg)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        filenames = category_filenames(ctx.config)
+        keep_names = set(filenames.values())
+        self._cleanup_stale_split_files(ctx, out_dir, keep_names)
+
+        cfg = ctx.config
+        text_columns = [str(c) for c in (cfg.get("text_columns") or [])]
+        parts = split_by_category(result)
+        paths: list[Path] = []
+
+        if ctx.verbose:
+            emit(ctx, f"  категории клиентов → {out_dir.name}/")
+
+        for cat, _default in CATEGORY_ORDER:
+            fname = filenames.get(cat, f"{cat}.xlsx")
+            part = parts.get(cat, result.iloc[0:0])
+            if part.empty and ctx.verbose:
+                emit(ctx, f"    {fname}: 0 строк ({cat})")
+                continue
+            paths.append(
+                self._write_split_frame(
+                    ctx,
+                    part,
+                    out_dir / fname,
+                    label=cat,
+                    text_columns=text_columns,
                 )
             )
         return paths

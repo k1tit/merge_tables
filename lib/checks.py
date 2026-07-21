@@ -172,9 +172,10 @@ class CheckEngine:
                 raise KeyError(f"Проверка {spec.get('name')!r}: нет колонки {col!r}.")
 
         trigger = {TextNorm.name(v) for v in spec.get("values", [])}
-        empty_label = str(spec.get("empty", "пусто"))
-        ok_label = str(spec.get("ok", "true"))
-        fail_label = str(spec.get("fail", "false"))
+        empty_label = str(spec.get("empty", ""))
+        ok_label = str(spec.get("ok", "Ok"))
+        fail_label = str(spec.get("fail", "False"))
+        ka_guardrail = bool(spec.get("ka_guardrail", False))
 
         a = df[left].fillna("").astype(str).str.strip().str.casefold()
         b = df[right].fillna("").astype(str).str.strip().str.casefold()
@@ -189,4 +190,9 @@ class CheckEngine:
         result.loc[one_empty | both_empty] = empty_out
         filled = ~a_empty & ~b_empty
         result.loc[applies & filled & (a != b)] = fail_label
+
+        if ka_guardrail:
+            non_ka = ~a.isin(trigger) & b.isin(trigger) & ~b_empty
+            result.loc[non_ka] = fail_label
+
         return result

@@ -5,6 +5,7 @@ from typing import Any
 
 import pandas as pd
 
+from .excel_io import excel_read_engine
 from .paths import PathResolver
 from .text_utils import TextNorm
 
@@ -29,9 +30,11 @@ def load_at_work_reference_df(base_dir: Path, cfg: dict[str, Any]) -> pd.DataFra
         resolver = PathResolver.from_config(base_dir, cfg)
         path = resolver.resolve(str(rel_file))
         if path.exists():
-            sheet = ref.get("sheet", "At Work")
+            sheet = ref.get("sheet", "AtWo&Ed")
+            column = str(ref.get("column", "A9"))
+            engine = excel_read_engine()
             try:
-                df = pd.read_excel(path, sheet_name=sheet, engine="calamine")
+                df = pd.read_excel(path, sheet_name=sheet, engine=engine)
             except Exception:
                 df = pd.read_excel(path, sheet_name=sheet)
             if not df.empty:
@@ -63,10 +66,11 @@ def load_at_work_a8_values(base_dir: Path, cfg: dict[str, Any]) -> frozenset[str
         resolver = PathResolver.from_config(base_dir, cfg)
         path = resolver.resolve(str(rel_file))
         if path.exists():
-            sheet = ref.get("sheet", 0)
-            column = str(ref.get("column", "A8"))
+            sheet = ref.get("sheet", "AtWo&Ed")
+            column = str(ref.get("column", "A9"))
+            engine = excel_read_engine()
             try:
-                df = pd.read_excel(path, sheet_name=sheet, engine="calamine")
+                df = pd.read_excel(path, sheet_name=sheet, engine=engine)
             except Exception:
                 df = pd.read_excel(path, sheet_name=sheet)
             col = _resolve_column(df, column)
