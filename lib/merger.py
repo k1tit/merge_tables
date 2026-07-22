@@ -116,12 +116,12 @@ class DataMerger:
             if (
                 overlap == 0
                 and label == "merge"
-                and set(left) == {"SOrg.", "Trade Name"}
+                and set(left) == {"Trade Name"}
             ):
                 emit(
                     self.ctx,
-                    "    ВНИМАНИЕ: TN merge — 0 совпадений по SOrg.+Trade Name. "
-                    "Проверьте references/Справочник_CH6.xlsx (колонки SO, TRADE NAME #).",
+                    "    ВНИМАНИЕ: TN merge — 0 совпадений по Trade Name. "
+                    "Проверьте References_CH6.xlsx / Nodes_CH6 (колонка TRADE NAME).",
                 )
             if overlap == 0 and label == "post-merge" and "Key" in left:
                 emit(
@@ -137,8 +137,8 @@ class DataMerger:
                         if col in ("TN_CH6", "TN_CH6_Name", "TN_CGrp"):
                             emit(
                                 self.ctx,
-                                f"    ВНИМАНИЕ: {col!r} пустая — в Справочник_CH6 "
-                                f"нет пары SO+TRADE NAME # для SOrg.+Trade Name",
+                                f"    ВНИМАНИЕ: {col!r} пустая — в Nodes_CH6 "
+                                f"нет TRADE NAME для Trade Name",
                             )
                         else:
                             emit(

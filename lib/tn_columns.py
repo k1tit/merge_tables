@@ -1,4 +1,4 @@
-"""TN_CH6 / TN_CH6_Name / TN_CGrp — join Base по SOrg.+Trade Name → Справочник_CH6."""
+"""TN_CH6 / TN_CH6_Name / TN_CGrp — join Base по Trade Name → Nodes_CH6."""
 
 from __future__ import annotations
 
@@ -19,11 +19,10 @@ TN_REF_SPEC: dict[str, Any] = {
     "file": "References_CH6.xlsx",
     "sheet": "Nodes_CH6",
     "merge_on": {
-        "left": ["SOrg.", "Trade Name"],
-        "right": ["SO Trade Name", "Trade Name"],
+        "left": ["Trade Name"],
+        "right": ["Trade Name"],
     },
     "key_excel": {
-        "SO Trade Name": "SO",
         "Trade Name": "TRADE NAME",
     },
     "aggregate": {
@@ -93,14 +92,14 @@ def _base_spec(ctx: BuildContext, *, full: bool) -> dict[str, Any]:
 
 
 def build_tn_columns(ctx: BuildContext, *, full: bool = False) -> pd.DataFrame:
-    """Base + TN_* из Справочник_CH6 (ключ: SOrg. & Trade Name)."""
+    """Base + TN_* из Nodes_CH6 (ключ: Trade Name)."""
     reader = ExcelSourceReader(ctx)
     merger = DataMerger(ctx)
 
     base = reader.read(_base_spec(ctx, full=full))
     ref = reader.read(
         TN_REF_SPEC,
-        merge_right=["SO Trade Name", "Trade Name"],
+        merge_right=["Trade Name"],
         key_excel=TN_REF_SPEC.get("key_excel"),
     )
 
@@ -139,7 +138,7 @@ def resolve_output_path(
 
 
 def compact_tn_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Только ключи и TN_* (без дублей по SOrg.+Trade Name)."""
+    """Только ключи и TN_* (без дублей по SOrg.+Customer+Trade Name)."""
     cols = [c for c in TN_KEY_COLUMNS if c in df.columns]
     cols.extend(c for c in TN_OUTPUT_COLUMNS if c in df.columns)
     out = df[cols].copy()

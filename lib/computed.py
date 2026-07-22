@@ -31,7 +31,18 @@ class ComputedColumnsApplier:
             col_type = str(spec.get("type", "concat")).strip().lower()
 
             if col_type == "key":
-                out[name] = cls._key_series(out, spec, a8_ref_values=a8_ref_values)
+                if spec.get("key_rules"):
+                    keys, rules = cls._key_priority_series(
+                        out, spec, a8_ref_values=a8_ref_values
+                    )
+                    out[name] = keys
+                    rule_col = str(spec.get("rule_column") or "Key_Rule").strip()
+                    if rule_col:
+                        out[rule_col] = rules
+                else:
+                    out[name] = cls._key_series(
+                        out, spec, a8_ref_values=a8_ref_values
+                    )
                 continue
             if col_type == "customer_key":
                 out[name] = cls._customer_key_series(out, spec, a8_ref_values=a8_ref_values)
@@ -234,6 +245,175 @@ class ComputedColumnsApplier:
         return TextNorm.key_part(val)
 
     @classmethod
+    def _row_cell(cls, row: pd.Series, column: str) -> str:
+        if column not in row.index:
+            return ""
+        return TextNorm.key_value(row[column])
+
+    @classmethod
+    def _norm_rule_values(cls, values: Any) -> set[str]:
+        out: set[str] = set()
+        for raw in values or []:
+            text = TextNorm.key_value(raw).upper()
+            if text:
+                out.add(text)
+        return out
+
+    @classmethod
+    def _norm_a8_rule_values(cls, values: Any) -> set[str]:
+        out: set[str] = set()
+        for raw in values or []:
+            norm = norm_a8_lookup(raw)
+            if norm:
+                out.add(norm)
+        return out
+
+    @classmethod
+    def _match_key_condition(
+        cls,
+        row: pd.Series,
+        cond: dict[str, Any],
+        *,
+        a8_ref_values: frozenset[str] | None,
+    ) -> bool:
+        col = str(cond.get("column", "")).strip()
+        val = cls._row_cell(row, col) if col else ""
+        val_upper = val.upper()
+
+        if cond.get("empty"):
+            return not val
+        if cond.get("not_empty"):
+            return bool(val)
+
+        if "equals" in cond:
+            expected = TextNorm.key_value(cond["equals"]).upper()
+            if val_upper != expected:
+                return False
+
+        if "in" in cond:
+            allowed = cls._norm_rule_values(cond["in"])
+            if val_upper not in allowed:
+                return False
+
+        if "not_in" in cond:
+            blocked = cls._norm_rule_values(cond["not_in"])
+            if val_upper in blocked:
+                return False
+
+        if cond.get("a8_in_reference"):
+            a8_col = col or cls._a8_column({"at_work_education": cond.get("at_work_education") or {}})
+            if a8_col not in row.index:
+                return False
+            a8 = norm_a8_lookup(row[a8_col])
+            if not a8 or not a8_ref_values or a8 not in a8_ref_values:
+                return False
+
+        if "a8_in" in cond:
+            a8_col = col or "A8"
+            if a8_col not in row.index:
+                return False
+            a8 = norm_a8_lookup(row[a8_col])
+            allowed = cls._norm_a8_rule_values(cond["a8_in"])
+            if not a8 or a8 not in allowed:
+                return False
+
+        return True
+
+    @classmethod
+    def _match_key_rule(
+        cls,
+        row: pd.Series,
+        rule: dict[str, Any],
+        *,
+        a8_ref_values: frozenset[str] | None,
+    ) -> bool:
+        if rule.get("default"):
+            return True
+        when = rule.get("when") or {}
+        for cond in when.get("all") or []:
+            if not cls._match_key_condition(row, cond, a8_ref_values=a8_ref_values):
+                return False
+        for cond in when.get("any") or []:
+            if cls._match_key_condition(row, cond, a8_ref_values=a8_ref_values):
+                return True
+        if when.get("any"):
+            return False
+        return bool(when.get("all") or rule.get("default"))
+
+    @classmethod
+    def _key_from_rule_formula(
+        cls,
+        row: pd.Series,
+        rule: dict[str, Any],
+        *,
+        sep: str,
+    ) -> str:
+        formula = str(rule.get("formula") or "").strip()
+        if not formula:
+            return cls._invalid_key_value(rule) if "invalid_key" in rule else ""
+        parts = cls._parse_column_formula(formula)
+        return cls._glue_parts(row, parts, sep)
+
+    @classmethod
+    def _rule_label(cls, rule: dict[str, Any]) -> str:
+        return str(rule.get("name") or rule.get("rule") or "").strip()
+
+    @classmethod
+    def _key_priority_series(
+        cls,
+        df: pd.DataFrame,
+        spec: dict[str, Any],
+        *,
+        a8_ref_values: frozenset[str] | None = None,
+    ) -> tuple[pd.Series, pd.Series]:
+        rules = list(spec.get("key_rules") or [])
+        if not rules:
+            raise ValueError("Key: задайте key_rules (приоритет 1..N) или старые formula/at_work_formula.")
+
+        sep = str(spec.get("separator", ""))
+        needed: set[str] = set()
+        for rule in rules:
+            formula = str(rule.get("formula") or "").strip()
+            if formula:
+                needed.update(cls._parse_column_formula(formula))
+            for block in (rule.get("when") or {}).values():
+                if not isinstance(block, list):
+                    continue
+                for cond in block:
+                    col = str(cond.get("column", "")).strip()
+                    if col:
+                        needed.add(col)
+        missing = [c for c in sorted(needed) if c not in df.columns]
+        if missing:
+            raise KeyError(f"Key: не найдены поля {missing!r}. Есть: {list(df.columns)}")
+
+        invalid_val = cls._invalid_key_value(spec)
+        keys: list[str] = []
+        rule_names: list[str] = []
+        for idx in df.index:
+            row = df.loc[idx]
+            matched = False
+            for rule in rules:
+                if not cls._match_key_rule(row, rule, a8_ref_values=a8_ref_values):
+                    continue
+                formula = str(rule.get("formula") or "").strip()
+                if formula:
+                    keys.append(cls._key_from_rule_formula(row, rule, sep=sep))
+                else:
+                    keys.append(invalid_val)
+                rule_names.append(cls._rule_label(rule))
+                matched = True
+                break
+            if not matched:
+                keys.append(invalid_val)
+                rule_names.append("")
+        index = df.index
+        return (
+            pd.Series(keys, index=index, dtype=object),
+            pd.Series(rule_names, index=index, dtype=object),
+        )
+
+    @classmethod
     def _key_series(
         cls,
         df: pd.DataFrame,
@@ -241,7 +421,11 @@ class ComputedColumnsApplier:
         *,
         a8_ref_values: frozenset[str] | None = None,
     ) -> pd.Series:
-        """Key = Grp4+CGrp+A7(+A8)+ZW_A7+Indus. (CONCAT без разделителя)."""
+        """Key по key_rules (приоритет 1..N) или legacy formula/at_work."""
+        if spec.get("key_rules"):
+            keys, _rules = cls._key_priority_series(df, spec, a8_ref_values=a8_ref_values)
+            return keys
+
         sep = str(spec.get("separator", ""))
         standard = cls._resolve_key_parts(spec, at_work=False)
         at_work = cls._resolve_key_parts(spec, at_work=True)

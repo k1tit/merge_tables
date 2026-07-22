@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-TN_CH6 / TN_CH6_Name / TN_CGrp из Справочник_CH6 по ключу SOrg. + Trade Name.
+TN_CH6 / TN_CH6_Name / TN_CGrp из Nodes_CH6 по ключу Trade Name.
 
   python tn_columns.py -s 3805           одна папка SOrg
   python tn_columns.py -s 3805 --full    все колонки Base + TN_*
@@ -23,7 +23,7 @@ from lib.tn_columns import build_tn_columns, make_context, write_tn_columns
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="TN_CH6 / TN_CH6_Name / TN_CGrp из Справочник_CH6",
+        description="TN_CH6 / TN_CH6_Name / TN_CGrp из Nodes_CH6 (ключ Trade Name)",
     )
     parser.add_argument(
         "-c",

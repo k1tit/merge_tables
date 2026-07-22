@@ -120,6 +120,7 @@ column_order:  # порядок колонок в итоговом Excel (ост
   - "Check CH6 Customer & TN"
   - "Check_TN_CGrp"
   - "Key"
+  - "Key_Rule"
   - "Key_CH6"
   - "Key_CH6_Name"
   - "Check CH6 Customer & Key_CH6"
@@ -153,27 +154,49 @@ computed_columns:
   - name: "Key"
     type: key
     separator: ""
-    formula: "Grp4 & CGrp & A7 & ZW_A7 & Indus."           # обычный Key
-    at_work_formula: "Grp4 & CGrp & A7 & A8 & ZW_A7 & Indus."  # CGrp P/Q или CH6_CGrp P
-    omit_parts_when:
-      column: "Grp4"
-      values: ["DI"]
-      parts: ["ZW_A7"]
-    # Grp4=DI и A8 из справочника At Work/Education → A7 & A8 & … (без ZW_A7)
-    include_parts_when:
-      - column: "Grp4"
-        values: ["DI"]
-        parts: ["A8"]
-        insert_after: "A7"
-        require_a8_in_reference: true
     invalid_key: ""
-    at_work_education:
-      reason_column: "CH6_CGrp"
-      reason_values: ["P"]
-      a8_column: "A8"
-    business_type:
-      column: "CGrp"
-      values: ["P", "Q"]
+    rule_column: "Key_Rule"
+    # Приоритет 1..5: первое подходящее правило (Key не всегда используется в Check Status)
+    key_rules:
+      - name: Q_KEY
+        when:
+          all:
+            - column: CGrp
+              in: ["Q"]
+            - column: Trade Name
+              empty: true
+        formula: "Grp4 & CGrp & A7 & Indus."
+      - name: DI_ATWOED_KEY
+        when:
+          all:
+            - column: Grp4
+              in: ["DI"]
+            - column: CGrp
+              not_in: ["Q", "H"]
+            - column: A8
+              a8_in: ["216", "030", "044", "043", "025", "029", "042", "207"]
+        formula: "Grp4 & CGrp & A7 & A8 & Indus."
+      - name: DI_BASE_KEY
+        when:
+          all:
+            - column: Grp4
+              in: ["DI"]
+            - column: CGrp
+              not_in: ["Q"]
+        formula: "Grp4 & CGrp & A7 & Indus."
+      - name: IN_235_249_KEY
+        when:
+          all:
+            - column: Grp4
+              in: ["IN"]
+            - column: CGrp
+              in: ["A", "B", "H"]
+            - column: ZW_A7
+              in: ["235", "249"]
+        formula: "Grp4 & CGrp & A7 & ZW_A7 & Indus."
+      - name: NO_KEY
+        default: true
+        formula: ""
 
 text_columns:       # читать как текст (lib/sources.py)
   - "Tax Number 1"
@@ -235,6 +258,7 @@ column_colors:
     - "TN_CGrp"
   E1D5E7:
     - "Key"
+    - "Key_Rule"
     - "Key_CH6"
     - "Key_CH6_Name"
     - "Key_CH6_SO"
@@ -387,14 +411,13 @@ sources:
       - name: "CH6_CGrp"
         source: "6th level_CGrp"
 
-  # --- 4. Trade Name → TN_* (Nodes_CH6: SOrg.+Trade Name → SO+TRADE NAME) ---
+  # --- 4. Trade Name → TN_* (Nodes_CH6: Trade Name → TRADE NAME) ---
   - file: "References_CH6.xlsx"
     sheet: "Nodes_CH6"
     merge_on:
-      left: ["SOrg.", "Trade Name"]
-      right: ["SO Trade Name", "Trade Name"]
+      left: ["Trade Name"]
+      right: ["Trade Name"]
     key_excel:
-      SO Trade Name: "SO"
       Trade Name: "TRADE NAME"
     aggregate:
       TN_CH6:
