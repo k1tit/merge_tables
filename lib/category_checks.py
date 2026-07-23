@@ -153,5 +153,5 @@ def apply_category_checks(
         comments.append(cm)
     out["Check Status"] = statuses
     out["Comment"] = comments
-    out["Comment2"] = ""
+    out["Comment_Check_CH6"] = ""
     return out

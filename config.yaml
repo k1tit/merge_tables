@@ -129,7 +129,7 @@ column_order:  # порядок колонок в итоговом Excel (ост
   - "Category"
   - "Check Status"
   - "Comment"
-  - "Comment2"
+  - "Comment_Check_CH6"
 
 # Вычисляются ПОСЛЕ sources[], ДО post_sources[] (lib/computed.py)
 computed_columns:
@@ -209,6 +209,7 @@ text_columns:       # читать как текст (lib/sources.py)
   - "Search Term 2"
   - "Check Status"
   - "Comment"
+  - "Comment_Check_CH6"
 
 leading_zero_columns:  # дополнить нулями слева при записи
   A7: 2
@@ -232,6 +233,7 @@ column_colors:
     - "Grp4"
     - "OrBlk"
     - "OrBlk2"
+    - "Comment_Check_CH6"
   BDD7EE:
     - "CH6"
     - "CH6_Name"
@@ -266,7 +268,6 @@ column_colors:
     - "Category"
     - "Check Status"
     - "Comment"
-    - "Comment2"
 
 excel_autofit_columns: true
 excel_autofit_sample_rows: 1000
