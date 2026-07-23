@@ -169,6 +169,11 @@ class ColumnResolver:
                 if excel_name in used_excel:
                     continue
                 ex_norm = TextNorm.name(excel_col)
+                if col_norm == "key_in_so":
+                    if ex_norm in ("key_in_so", "key"):
+                        found = excel_name
+                        break
+                    continue
                 if col_norm == ex_norm:
                     found = excel_name
                     break

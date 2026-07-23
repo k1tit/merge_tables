@@ -6,7 +6,12 @@ from typing import Any
 
 import pandas as pd
 
-from .nodes_ref import ch6_key_category, ch6_keys_match, load_ch6_key_map
+from .nodes_ref import (
+    ch6_key_category,
+    ch6_keys_match,
+    load_ch6_key_map,
+    load_trade_name_set,
+)
 from .text_utils import TextNorm
 
 STATUS_OK = "Ok"
@@ -14,6 +19,8 @@ STATUS_FALSE = "False"
 STATUS_NEED_DATA = "Need_Data"
 STATUS_KEY_NOT_FOUND = "Key_not_found"
 STATUS_NEED_REVIEW = "Need_review"
+
+TN_MISSING_REF_COMMENT = "TN отсутствует в справочнике"
 
 KA_CGRP = frozenset({"S", "F", "K", "Q"})
 
@@ -133,6 +140,7 @@ def apply_category_checks(
         return df
     out = df.copy()
     key_map = load_ch6_key_map(base_dir, reference_file)
+    trade_names = load_trade_name_set(base_dir, reference_file)
     statuses: list[str] = []
     comments: list[str] = []
     for _, row in out.iterrows():
@@ -149,6 +157,9 @@ def apply_category_checks(
             st, cm = _check_direct_rest(row)
         else:
             st, cm = STATUS_NEED_REVIEW, f"Неизвестная категория {cat}"
+        trade = TextNorm.trade_name_key(_val(row, "Trade Name"))
+        if trade and trade not in trade_names:
+            cm = TN_MISSING_REF_COMMENT
         statuses.append(st)
         comments.append(cm)
     out["Check Status"] = statuses

@@ -114,6 +114,9 @@ column_order:  # порядок колонок в итоговом Excel (ост
   - "ZW_CH6"
   - "ZW_CH6_Name"
   - "Check CH6 Customer & ZW"
+  - "Key_IN_SO"
+  - "ZW_Key_IN_SO"
+  - "Check Key_IN_SO"
   - "TN_CH6"
   - "TN_CH6_Name"
   - "TN_CGrp"
@@ -242,6 +245,7 @@ column_colors:
   F8CBAD:
     - "Check CH6_CGrp"
     - "Check CH6 Customer & ZW"
+    - "Check Key_IN_SO"
     - "Check CH6 Customer & TN"
     - "Check_TN_CGrp"
     - "Check CH6 Customer & Key_CH6"
@@ -254,6 +258,8 @@ column_colors:
     - "ZW_CGrp"
     - "ZW_CH6"
     - "ZW_CH6_Name"
+    - "Key_IN_SO"
+    - "ZW_Key_IN_SO"
   D9EAD3:
     - "TN_CH6"
     - "TN_CH6_Name"
@@ -301,6 +307,18 @@ checks:
     apply_when:
       column_in:
         Grp4: ["IN"]
+
+  - name: "Check Key_IN_SO"
+    type: compare_match_empty
+    left_column: "Key_IN_SO"
+    right_column: "ZW_Key_IN_SO"
+    ok: "true"
+    fail: "false"
+    empty: ""
+    skip: ""
+    apply_when:
+      column_not_equal:
+        SOrg.: "ZW_SO"
 
   - name: "Check CH6 Customer & TN"
     type: compare_match_empty
@@ -478,3 +496,27 @@ sources:
         source: "HgLvCust."
       - name: "ZW_CH6_Name"
         source: "Text:Customer number of the higher-level"
+
+  # --- 8. Key_IN_SO по CH6 (Nodes_CH6: 6th level → KEY / Key_IN_SO), только cross-SO ---
+  - file: "References_CH6.xlsx"
+    sheet: "Nodes_CH6"
+    merge_on:
+      left: ["CH6"]
+      right: ["6th level"]
+    dedupe: true
+    columns:
+      - name: "Key_IN_SO"
+        source: "Key_IN_SO"
+        fallback: "KEY"
+
+  # --- 9. ZW_Key_IN_SO по ZW_CH6 (Nodes_CH6) ---
+  - file: "References_CH6.xlsx"
+    sheet: "Nodes_CH6"
+    merge_on:
+      left: ["ZW_CH6"]
+      right: ["6th level"]
+    dedupe: true
+    columns:
+      - name: "ZW_Key_IN_SO"
+        source: "Key_IN_SO"
+        fallback: "KEY"

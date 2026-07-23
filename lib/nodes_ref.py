@@ -13,6 +13,32 @@ from .text_utils import TextNorm
 
 
 @lru_cache(maxsize=4)
+def load_trade_name_set(base_dir: str, reference_file: str) -> frozenset[str]:
+    """Нормализованные TRADE NAME из Nodes_CH6 (ключ merge TN_*)."""
+    path = Path(base_dir) / reference_file
+    if not path.exists():
+        return frozenset()
+    engine = excel_read_engine()
+    try:
+        df = pd.read_excel(path, sheet_name="Nodes_CH6", engine=engine)
+    except Exception:
+        df = pd.read_excel(path, sheet_name="Nodes_CH6")
+    trade_col = None
+    for col in df.columns:
+        if TextNorm.name(str(col)) == "trade name":
+            trade_col = col
+            break
+    if trade_col is None:
+        return frozenset()
+    values: set[str] = set()
+    for raw in df[trade_col].dropna():
+        key = TextNorm.trade_name_key(raw)
+        if key:
+            values.add(key)
+    return frozenset(values)
+
+
+@lru_cache(maxsize=4)
 def load_ch6_key_map(base_dir: str, reference_file: str) -> dict[str, str]:
     path = Path(base_dir) / reference_file
     if not path.exists():

@@ -66,7 +66,22 @@ class CheckEngine:
             if val not in allowed_norm:
                 return False
 
-        if not all_non_empty and not column_in:
+        column_not_equal = apply_when.get("column_not_equal") or {}
+        for col, other in column_not_equal.items():
+            col_name = str(col).strip()
+            other_name = str(other).strip()
+            for name in (col_name, other_name):
+                if name not in df.columns:
+                    raise KeyError(
+                        f"Проверка {spec.get('name')!r}: для column_not_equal "
+                        f"нет колонки {name!r}. Есть: {list(df.columns)}"
+                    )
+            left_val = TextNorm.key_value(df.at[idx, col_name])
+            right_val = TextNorm.key_value(df.at[idx, other_name])
+            if not left_val or not right_val or left_val == right_val:
+                return False
+
+        if not all_non_empty and not column_in and not column_not_equal:
             return True
         return True
 

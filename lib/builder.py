@@ -23,6 +23,7 @@ from .constants import EXCEL_MAX_ROWS, REQUIRED_CH6_COLUMNS, SCRIPT_VERSION
 from .context import BuildContext
 from .log_sink import emit, open_build_log
 from .text_utils import TextNorm
+from .key_in_so import clear_key_in_so_unless_cross_so
 from .merger import DataMerger
 from .merge_keys import MergeKeysParser
 from .sources import ExcelSourceReader
@@ -129,6 +130,7 @@ class ReportBuilder:
 
         emit(ctx, "  объединение источников (merge)...")
         result = merger.merge_all(frames, sources)
+        result = clear_key_in_so_unless_cross_so(result)
         before_tn = tn_filled_count(result)
         result = fill_tn_from_ch6(result)
         after_tn = tn_filled_count(result)
