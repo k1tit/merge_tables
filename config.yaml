@@ -430,6 +430,8 @@ sources:
       right: ["Trade Name"]
     key_excel:
       Trade Name: "TRADE NAME"
+    merge_require_non_empty:
+      - "Trade Name"
     aggregate:
       TN_CH6:
         source: "6th level"

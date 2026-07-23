@@ -12,7 +12,7 @@ from .excel_io import excel_read_engine, excel_write_engine
 from .log_sink import emit
 from .merger import DataMerger
 from .sources import ExcelSourceReader
-from .tn_fallback import fill_tn_from_ch6, tn_filled_count
+from .tn_fallback import finalize_tn_columns, tn_filled_count
 from .text_utils import TextNorm
 
 TN_REF_SPEC: dict[str, Any] = {
@@ -110,11 +110,7 @@ def build_tn_columns(ctx: BuildContext, *, full: bool = False) -> pd.DataFrame:
         label="tn",
     )
     if full or "CH6" in result.columns:
-        before = tn_filled_count(result)
-        result = fill_tn_from_ch6(result)
-        after = tn_filled_count(result)
-        if ctx.verbose and after > before:
-            emit(ctx, f"  TN fallback (CH6): +{after - before} строк")
+        result = finalize_tn_columns(result)
 
     if ctx.verbose:
         filled = sum(TextNorm.filled_count(result[c]) for c in TN_OUTPUT_COLUMNS) // 3

@@ -27,7 +27,7 @@ from .key_in_so import clear_key_in_so_unless_cross_so
 from .merger import DataMerger
 from .merge_keys import MergeKeysParser
 from .sources import ExcelSourceReader
-from .tn_fallback import fill_tn_from_ch6, tn_filled_count
+from .tn_fallback import finalize_tn_columns, tn_filled_count
 from .dummy_filter import filter_dummy_clients
 from .categories import assign_categories, category_filenames, split_by_category, CATEGORY_ORDER
 from .nodes_ref import load_trade_name_set
@@ -132,15 +132,7 @@ class ReportBuilder:
         emit(ctx, "  объединение источников (merge)...")
         result = merger.merge_all(frames, sources)
         result = clear_key_in_so_unless_cross_so(result)
-        before_tn = tn_filled_count(result)
-        result = fill_tn_from_ch6(result)
-        after_tn = tn_filled_count(result)
-        if ctx.verbose and after_tn > before_tn:
-            emit(
-                ctx,
-                f"  TN fallback (CH6): +{after_tn - before_tn} строк, "
-                f"TN_CH6 заполнено {after_tn} из {len(result)}",
-            )
+        result = finalize_tn_columns(result)
         ref_path = ensure_at_work_reference_file(ctx.base_dir, cfg)
         if ref_path and ctx.verbose:
             emit(ctx, f"  справочник At Work&Education: {ref_path.name}")
