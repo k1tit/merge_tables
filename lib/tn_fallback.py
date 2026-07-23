@@ -1,4 +1,4 @@
-"""TN_* для строк без Trade Name — из CH6 sold-to."""
+"""TN_* для строк без Trade Name — из CH6 sold-to (не подменяет lookup по Trade Name)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,12 @@ _TN_COLS = ("TN_CH6", "TN_CH6_Name", "TN_CGrp")
 _CH6_COLS = ("CH6", "CH6_Name", "CH6_CGrp")
 
 
-def fill_tn_from_ch6(df: pd.DataFrame) -> pd.DataFrame:
-    """Если TN_CH6 пустой, а CH6 есть — заполнить TN_* из CH6/CH6_Name/CH6_CGrp."""
+def fill_tn_from_ch6(
+    df: pd.DataFrame,
+    *,
+    trade_name_column: str = "Trade Name",
+) -> pd.DataFrame:
+    """Если Trade Name пустой, TN_CH6 пустой, а CH6 есть — TN_* := CH6_*."""
     if "CH6" not in df.columns:
         return df
 
@@ -22,7 +26,11 @@ def fill_tn_from_ch6(df: pd.DataFrame) -> pd.DataFrame:
 
     tn_empty = ~out["TN_CH6"].map(TextNorm.key_value).astype(bool)
     ch6_filled = out["CH6"].map(TextNorm.key_value).astype(bool)
-    mask = tn_empty & ch6_filled
+    if trade_name_column in out.columns:
+        trade_empty = ~out[trade_name_column].map(TextNorm.key_value).astype(bool)
+    else:
+        trade_empty = pd.Series(True, index=out.index)
+    mask = tn_empty & ch6_filled & trade_empty
     if not mask.any():
         return out
 
