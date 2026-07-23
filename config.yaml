@@ -349,14 +349,6 @@ post_sources:
         source: "Узел"
       - name: "Key_CH6_Name"
         source: "Название узла"
-
-  - file: "References_CH6.xlsx"
-    sheet: "Key_CH6"
-    merge_on:
-      left: ["Key_CH6", "SOrg."]
-      right: ["Узел", "SO"]
-    dedupe: true
-    columns:
       - name: "Key_CH6_SO"
         source: "SO"
 
