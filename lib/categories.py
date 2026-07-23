@@ -31,7 +31,11 @@ def _norm_upper(series: pd.Series) -> pd.Series:
     return series.map(lambda v: TextNorm.key_value(v).upper())
 
 
-def assign_categories(df: pd.DataFrame) -> pd.Series:
+def assign_categories(
+    df: pd.DataFrame,
+    *,
+    trade_names_in_ref: frozenset[str] | None = None,
+) -> pd.Series:
     """Присвоить категорию каждой строке (первое совпадение по порядку)."""
     n = len(df)
     result = pd.Series(["Direct_Rest"] * n, index=df.index, dtype=object)
@@ -40,6 +44,9 @@ def assign_categories(df: pd.DataFrame) -> pd.Series:
     trade_col = "Trade Name"
     if trade_col in df.columns:
         m = _filled(df[trade_col])
+        if trade_names_in_ref is not None:
+            in_ref = df[trade_col].map(TextNorm.trade_name_key).isin(trade_names_in_ref)
+            m = m & in_ref
         result.loc[m & ~assigned] = "Trade Name"
         assigned |= m
 

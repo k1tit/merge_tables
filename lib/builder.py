@@ -30,6 +30,7 @@ from .sources import ExcelSourceReader
 from .tn_fallback import fill_tn_from_ch6, tn_filled_count
 from .dummy_filter import filter_dummy_clients
 from .categories import assign_categories, category_filenames, split_by_category, CATEGORY_ORDER
+from .nodes_ref import load_trade_name_set
 from .category_checks import apply_category_checks
 
 
@@ -167,7 +168,13 @@ class ReportBuilder:
         if ctx.verbose and len(result) < before_dummy:
             emit(ctx, f"  dummy filter: удалено {before_dummy - len(result)} строк")
 
-        result["Category"] = assign_categories(result)
+        result["Category"] = assign_categories(
+            result,
+            trade_names_in_ref=load_trade_name_set(
+                str(ctx.base_dir),
+                str(cfg.get("reference_file") or "References_CH6.xlsx"),
+            ),
+        )
         ref_file = str(cfg.get("reference_file") or "References_CH6.xlsx")
         result = apply_category_checks(
             result,
