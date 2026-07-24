@@ -334,6 +334,7 @@ checks:
     type: match_when_in_either
     columns: ["CGrp", "TN_CGrp"]
     values: ["S", "F", "K", "Q"]
+    right_tokens: true
     empty: ""
     ok: "true"
     fail: "false"

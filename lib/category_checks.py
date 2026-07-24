@@ -68,13 +68,9 @@ def _check_trade_name(row: pd.Series) -> tuple[str, str]:
         return STATUS_NEED_DATA, "TN_CH6 пустой"
     if ch6 in tn_list:
         if tn_cgrp_raw:
-            tn_cgrps = {
-                TextNorm.key_value(v).upper()
-                for v in TextNorm.split_aggregated(tn_cgrp_raw)
-            }
-            if cgrp and cgrp in tn_cgrps:
+            if TextNorm.cgrp_in_tn_cgrp(cgrp, tn_cgrp_raw):
                 return STATUS_OK, f"CH6 {ch6} в TN_CH6, CGrp={cgrp}"
-            if cgrp and tn_cgrps and cgrp not in tn_cgrps:
+            if cgrp:
                 return STATUS_FALSE, f"CH6 in TN, CGrp {cgrp} != TN_CGrp {tn_cgrp_raw}"
         return STATUS_OK, f"CH6 {ch6} в TN_CH6"
     return STATUS_FALSE, f"CH6 {ch6} != TN_CH6 ({', '.join(tn_list)})"

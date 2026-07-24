@@ -133,5 +133,31 @@ class TextNorm:
         return [p.strip() for p in parts if p.strip()]
 
     @staticmethod
+    def split_cgrp_tokens(val: Any, *, separator: str = ", ") -> list[str]:
+        """TN_CGrp: «B/H», «B, H», «K, Q» → отдельные CGrp."""
+        tokens: list[str] = []
+        seen: set[str] = set()
+        for part in TextNorm.split_aggregated(val, separator=separator):
+            chunks = (
+                [p.strip() for p in part.split("/") if p.strip()]
+                if "/" in part
+                else [part]
+            )
+            for chunk in chunks:
+                norm = TextNorm.key_value(chunk).upper()
+                if norm and norm not in seen:
+                    seen.add(norm)
+                    tokens.append(norm)
+        return tokens
+
+    @staticmethod
+    def cgrp_in_tn_cgrp(cgrp: Any, tn_cgrp: Any, *, separator: str = ", ") -> bool:
+        left = TextNorm.key_value(cgrp).upper()
+        if not left:
+            return False
+        tokens = TextNorm.split_cgrp_tokens(tn_cgrp, separator=separator)
+        return left in tokens if tokens else left == TextNorm.key_value(tn_cgrp).upper()
+
+    @staticmethod
     def filled_count(series: pd.Series) -> int:
         return int(series.fillna("").astype(str).str.strip().ne("").sum())

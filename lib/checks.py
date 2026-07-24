@@ -191,6 +191,7 @@ class CheckEngine:
         ok_label = str(spec.get("ok", "Ok"))
         fail_label = str(spec.get("fail", "False"))
         ka_guardrail = bool(spec.get("ka_guardrail", False))
+        right_tokens = bool(spec.get("right_tokens"))
 
         a = df[left].fillna("").astype(str).str.strip().str.casefold()
         b = df[right].fillna("").astype(str).str.strip().str.casefold()
@@ -204,7 +205,14 @@ class CheckEngine:
         empty_out = self._empty_result(empty_label)
         result.loc[one_empty | both_empty] = empty_out
         filled = ~a_empty & ~b_empty
-        result.loc[applies & filled & (a != b)] = fail_label
+        if right_tokens:
+            mismatch = pd.Series(False, index=df.index)
+            for idx in df.index[filled]:
+                if not TextNorm.cgrp_in_tn_cgrp(df.at[idx, left], df.at[idx, right]):
+                    mismatch.at[idx] = True
+            result.loc[filled & mismatch] = fail_label
+        else:
+            result.loc[applies & filled & (a != b)] = fail_label
 
         if ka_guardrail:
             non_ka = ~a.isin(trigger) & b.isin(trigger) & ~b_empty
