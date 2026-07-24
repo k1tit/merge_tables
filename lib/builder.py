@@ -137,6 +137,8 @@ class ReportBuilder:
         if ref_path and ctx.verbose:
             emit(ctx, f"  справочник At Work&Education: {ref_path.name}")
         a8_ref_values = load_at_work_a8_values(ctx.base_dir, cfg)
+        ref_file = str(cfg.get("reference_file") or "References_CH6.xlsx")
+        trade_names = load_trade_name_set(str(ctx.base_dir), ref_file)
         if ctx.verbose:
             emit(ctx, f"  поводы A8 в справочнике At Work: {len(a8_ref_values)}")
         emit(ctx, "  вычисляемые колонки (Key, Customer Key)...")
@@ -144,6 +146,7 @@ class ReportBuilder:
             result,
             cfg.get("computed_columns"),
             a8_ref_values=a8_ref_values,
+            trade_names_in_ref=trade_names,
         )
 
         post_sources = cfg.get("post_sources") or []
@@ -162,12 +165,8 @@ class ReportBuilder:
 
         result["Category"] = assign_categories(
             result,
-            trade_names_in_ref=load_trade_name_set(
-                str(ctx.base_dir),
-                str(cfg.get("reference_file") or "References_CH6.xlsx"),
-            ),
+            trade_names_in_ref=trade_names,
         )
-        ref_file = str(cfg.get("reference_file") or "References_CH6.xlsx")
         result = apply_category_checks(
             result,
             base_dir=str(ctx.base_dir),

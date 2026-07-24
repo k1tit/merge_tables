@@ -167,7 +167,7 @@ computed_columns:
             - column: CGrp
               in: ["Q"]
             - column: Trade Name
-              empty: true
+              empty_or_not_in_reference: true
         formula: "Grp4 & CGrp & A7 & Indus."
       - name: DI_ATWOED_KEY
         when:

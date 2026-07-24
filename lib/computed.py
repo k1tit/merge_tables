@@ -21,6 +21,7 @@ class ComputedColumnsApplier:
         specs: list[dict[str, Any]] | None,
         *,
         a8_ref_values: frozenset[str] | None = None,
+        trade_names_in_ref: frozenset[str] | None = None,
     ) -> pd.DataFrame:
         if not specs:
             return df
@@ -33,7 +34,10 @@ class ComputedColumnsApplier:
             if col_type == "key":
                 if spec.get("key_rules"):
                     keys, rules = cls._key_priority_series(
-                        out, spec, a8_ref_values=a8_ref_values
+                        out,
+                        spec,
+                        a8_ref_values=a8_ref_values,
+                        trade_names_in_ref=trade_names_in_ref,
                     )
                     out[name] = keys
                     rule_col = str(spec.get("rule_column") or "Key_Rule").strip()
@@ -275,10 +279,20 @@ class ComputedColumnsApplier:
         cond: dict[str, Any],
         *,
         a8_ref_values: frozenset[str] | None,
+        trade_names_in_ref: frozenset[str] | None = None,
     ) -> bool:
         col = str(cond.get("column", "")).strip()
         val = cls._row_cell(row, col) if col else ""
         val_upper = val.upper()
+
+        if cond.get("empty_or_not_in_reference"):
+            if not col:
+                return False
+            if not val:
+                return True
+            if trade_names_in_ref is None:
+                return False
+            return TextNorm.trade_name_key(val) not in trade_names_in_ref
 
         if cond.get("empty"):
             return not val
@@ -326,15 +340,26 @@ class ComputedColumnsApplier:
         rule: dict[str, Any],
         *,
         a8_ref_values: frozenset[str] | None,
+        trade_names_in_ref: frozenset[str] | None = None,
     ) -> bool:
         if rule.get("default"):
             return True
         when = rule.get("when") or {}
         for cond in when.get("all") or []:
-            if not cls._match_key_condition(row, cond, a8_ref_values=a8_ref_values):
+            if not cls._match_key_condition(
+                row,
+                cond,
+                a8_ref_values=a8_ref_values,
+                trade_names_in_ref=trade_names_in_ref,
+            ):
                 return False
         for cond in when.get("any") or []:
-            if cls._match_key_condition(row, cond, a8_ref_values=a8_ref_values):
+            if cls._match_key_condition(
+                row,
+                cond,
+                a8_ref_values=a8_ref_values,
+                trade_names_in_ref=trade_names_in_ref,
+            ):
                 return True
         if when.get("any"):
             return False
@@ -365,6 +390,7 @@ class ComputedColumnsApplier:
         spec: dict[str, Any],
         *,
         a8_ref_values: frozenset[str] | None = None,
+        trade_names_in_ref: frozenset[str] | None = None,
     ) -> tuple[pd.Series, pd.Series]:
         rules = list(spec.get("key_rules") or [])
         if not rules:
@@ -394,7 +420,12 @@ class ComputedColumnsApplier:
             row = df.loc[idx]
             matched = False
             for rule in rules:
-                if not cls._match_key_rule(row, rule, a8_ref_values=a8_ref_values):
+                if not cls._match_key_rule(
+                    row,
+                    rule,
+                    a8_ref_values=a8_ref_values,
+                    trade_names_in_ref=trade_names_in_ref,
+                ):
                     continue
                 formula = str(rule.get("formula") or "").strip()
                 if formula:
