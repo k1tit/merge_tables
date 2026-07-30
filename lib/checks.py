@@ -157,6 +157,8 @@ class CheckEngine:
             spec = {**spec, "dash_match": spec.get("dash_match", True)}
         if spec.get("type") == "ch6_customer_vs_tn_ch6" or right_col == "TN_CH6":
             spec = {**spec, "list_compare": spec.get("list_compare", True)}
+        if right_col == "ZW_CH6":
+            spec = {**spec, "list_compare": spec.get("list_compare", True)}
 
         for col in (left_col, right_col):
             if col not in df.columns:

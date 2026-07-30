@@ -302,6 +302,8 @@ checks:
     type: compare_match_empty
     left_column: "CH6"
     right_column: "ZW_CH6"
+    list_compare: true
+    separator: ", "
     ok: "true"
     fail: "false"
     apply_when:

@@ -13,6 +13,18 @@ from .sources import ExcelSourceReader
 from .text_utils import TextNorm
 
 
+_ZW_AGG_COLS = (
+    "ZW",
+    "ZW_SO",
+    "ZW_A7",
+    "ZW_CGrp",
+    "ZW_CH6",
+    "ZW_CH6_Name",
+    "Key_IN_SO",
+    "ZW_Key_IN_SO",
+)
+
+
 class DataMerger:
     """Последовательное объединение источников в одну таблицу."""
 
@@ -246,7 +258,7 @@ class DataMerger:
         return series.fillna("").astype(str).str.strip().ne("")
 
     def _finalize_zw_rows(self, result: pd.DataFrame) -> pd.DataFrame:
-        """ZW по Customer (без SOrg.): заполнить пустые ячейки из других строк того же клиента."""
+        """Схлопнуть fan-out ZW в одну строку на клиента; агрегировать ZW_*."""
         out = result.copy()
         if "ZwPartner" in out.columns:
             if "ZW" in out.columns:
@@ -258,20 +270,16 @@ class DataMerger:
         if "Customer" not in out.columns:
             return out
 
-        zw_cols = [
-            c
-            for c in (
-                "ZW",
-                "ZW_SO",
-                "ZW_A7",
-                "ZW_CGrp",
-                "ZW_CH6",
-                "ZW_CH6_Name",
-            )
-            if c in out.columns
-        ]
-        for col in zw_cols:
-            out[col] = self._fill_customer_column(out, col)
+        group_keys = [k for k in ("SOrg.", "Customer") if k in out.columns]
+        zw_cols = [c for c in _ZW_AGG_COLS if c in out.columns]
+        if group_keys and zw_cols and out.duplicated(subset=group_keys, keep=False).any():
+            out = self._collapse_zw_groups(out, group_keys, zw_cols)
+            if self.ctx.verbose:
+                emit(
+                    self.ctx,
+                    f"  ZW: схлопнуто в одну строку на {', '.join(group_keys)} "
+                    f"(aggregate: {', '.join(zw_cols)})",
+                )
 
         if not {"ZW", "ZW_SO"}.issubset(out.columns):
             return out
@@ -289,21 +297,19 @@ class DataMerger:
             )
         return out.loc[~orphan].copy()
 
-    def _fill_customer_column(self, df: pd.DataFrame, col: str) -> pd.Series:
-        series = df[col].copy()
-        filled = self._filled(series)
-        if not filled.any():
-            return series
-        refs = (
-            df.loc[filled, ["Customer", col]]
-            .drop_duplicates("Customer", keep="first")
-            .set_index("Customer")[col]
-        )
-        has = df["Customer"].map(filled.groupby(df["Customer"], dropna=False).any())
-        fill_mask = ~filled & has.fillna(False)
-        if fill_mask.any():
-            series.loc[fill_mask] = df.loc[fill_mask, "Customer"].map(refs)
-        return series
+    @staticmethod
+    def _collapse_zw_groups(
+        df: pd.DataFrame,
+        group_keys: list[str],
+        zw_cols: list[str],
+    ) -> pd.DataFrame:
+        rows: list[pd.Series] = []
+        for _, group in df.groupby(group_keys, dropna=False, sort=False):
+            row = group.iloc[0].copy()
+            for col in zw_cols:
+                row[col] = TextNorm.join_unique_values(group[col], separator=", ")
+            rows.append(row)
+        return pd.DataFrame(rows, columns=df.columns).reset_index(drop=True)
 
     @staticmethod
     def _rename_colliding_right_keys(

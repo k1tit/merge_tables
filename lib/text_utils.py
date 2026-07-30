@@ -159,5 +159,27 @@ class TextNorm:
         return left in tokens if tokens else left == TextNorm.key_value(tn_cgrp).upper()
 
     @staticmethod
+    def join_unique_values(values: Any, *, separator: str = ", ") -> str:
+        """Склеить уникальные значения (в т.ч. уже aggregated «a, b»)."""
+        if isinstance(values, pd.Series):
+            iterable = values.tolist()
+        elif isinstance(values, (list, tuple)):
+            iterable = list(values)
+        else:
+            iterable = [values]
+        seen: set[str] = set()
+        out: list[str] = []
+        for raw in iterable:
+            if raw is None or pd.isna(raw):
+                continue
+            for part in TextNorm.split_aggregated(raw, separator=separator):
+                v = TextNorm.key_part(part)
+                if not v or v in seen:
+                    continue
+                seen.add(v)
+                out.append(v)
+        return separator.join(out)
+
+    @staticmethod
     def filled_count(series: pd.Series) -> int:
         return int(series.fillna("").astype(str).str.strip().ne("").sum())

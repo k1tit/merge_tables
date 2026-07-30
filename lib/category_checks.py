@@ -102,19 +102,21 @@ def _check_q_vend(row: pd.Series) -> tuple[str, str]:
 
 def _check_in_partner(row: pd.Series, key_map: dict[str, str]) -> tuple[str, str]:
     ch6 = TextNorm.norm_customer_node(_val(row, "CH6"))
-    zw_ch6 = TextNorm.norm_customer_node(_val(row, "ZW_CH6"))
+    zw_list = _split_list(_val(row, "ZW_CH6"))
     sorg = _val(row, "SOrg.")
-    zw_so = _val(row, "ZW_SO")
+    zw_so_list = _split_list(_val(row, "ZW_SO"))
     if not ch6:
         return STATUS_NEED_DATA, "CH6 пустой"
-    if not zw_ch6:
+    if not zw_list:
         return STATUS_NEED_DATA, "ZW_CH6 пустой"
-    if sorg and zw_so and sorg != zw_so:
-        if ch6_keys_match(ch6, zw_ch6, key_map):
-            lk = ch6_key_category(ch6, key_map)
-            return STATUS_OK, f"Cross-SO: KEY={lk or 'same CH6'}"
-        return STATUS_FALSE, f"Cross-SO: CH6 KEY != ZW_CH6 KEY"
-    status, msg = _compare_ch6_with_expected(ch6, zw_ch6)
+    cross_so = bool(sorg and zw_so_list and sorg not in zw_so_list)
+    if cross_so:
+        for zw in zw_list:
+            if ch6_keys_match(ch6, zw, key_map):
+                lk = ch6_key_category(ch6, key_map)
+                return STATUS_OK, f"Cross-SO: KEY={lk or 'same CH6'}"
+        return STATUS_FALSE, "Cross-SO: CH6 KEY != ZW_CH6 KEY"
+    status, msg = _compare_ch6_with_expected(ch6, zw_list)
     return status, msg
 
 
